@@ -351,7 +351,7 @@ app.layout = html.Div(
         html.Div(
             style={"padding": "0 8px 8px 8px"},
             children=[
-                dbc.Button("Copy selected row to Selected table", id="copy-row-btn", color="success", size="sm"),
+                html.Span("Use table checkboxes to copy rows to Selected Molecules.", style={"fontSize": "12px", "color": "#555"}),
                 html.Span(id="copy-row-status", style={"marginLeft": "10px", "fontSize": "12px", "color": "#555"})
             ]
         ),
@@ -597,7 +597,7 @@ app.layout = html.Div(
                                                     filter_action="native",
                                                     sort_action="native",
                                                     sort_mode="multi",
-                                                    row_selectable="single",
+                                                    row_selectable="multi",
                                                     selected_rows=[0],
                                                     style_table={"flex": "1", "height": "100%", "overflowY": "auto", "overflowX": "auto"},
                                                     style_header={
@@ -721,7 +721,7 @@ app.layout = html.Div(
             style={"display": "none", "height": "85vh", "padding": "8px"},
             children=[
                 html.Div(style={"height": "100%", "display": "flex", "gap": "10px"}, children=[
-                    html.Div(style={"flex": 2}, children=[
+                    html.Div(style={"flex": 7}, children=[
                         dash_table.DataTable(
                             id="selected-molecules-table",
                             columns=[col for col in table_columns[:4]],
@@ -734,7 +734,7 @@ app.layout = html.Div(
                             style_cell={'textAlign': 'left', 'padding': '8px', 'fontSize': '12px'}
                         )
                     ]),
-                    html.Div(style={"flex": 1, "border": "1px solid #e5e7eb", "borderRadius": "8px", "display": "flex",
+                    html.Div(style={"flex": 3, "border": "1px solid #e5e7eb", "borderRadius": "8px", "display": "flex",
                                     "justifyContent": "center", "alignItems": "center", "backgroundColor": "#fff"}, children=[
                         html.Div(id="selected-img-container")
                     ])
@@ -918,38 +918,40 @@ def sync_table_selection(scatter_click, slider_value, slider_mode):
 
 @app.callback(
     Output("main-page-container", "style"),
-    Output("copy-row-btn", "style"),
     Output("selected-page-container", "style"),
     Input("page-tabs", "value")
 )
 def switch_page(active_tab):
     if active_tab == "selected-page":
-        return {"display": "block", "height": "0", "overflow": "hidden"}, {"display": "none"}, {"display": "block", "height": "85vh", "padding": "8px"}
-    return {"display": "block", "height": "85vh", "overflow": "visible"}, {"display": "inline-block"}, {"display": "none", "height": "85vh", "padding": "8px"}
+        return {"display": "block", "height": "0", "overflow": "hidden"}, {"display": "block", "height": "85vh", "padding": "8px"}
+    return {"display": "block", "height": "85vh", "overflow": "visible"}, {"display": "none", "height": "85vh", "padding": "8px"}
 
 
 @app.callback(
     Output("selected-molecules-store", "data"),
     Output("copy-row-status", "children"),
-    Input("copy-row-btn", "n_clicks"),
-    State("molecules-table", "selected_rows"),
+    Input("molecules-table", "selected_rows"),
     State("molecules-table", "data"),
     State("selected-molecules-store", "data"),
     prevent_initial_call=True
 )
-def copy_selected_row(n_clicks, selected_rows, table_data, selected_data):
-    if not n_clicks or not selected_rows or not table_data:
-        return selected_data, "No row selected."
-    row = table_data[selected_rows[0]]
+def copy_selected_row(selected_rows, table_data, selected_data):
+    if not selected_rows or not table_data:
+        return selected_data, "No rows selected."
     selected_data = selected_data or []
-    same_id_smiles_exists = any(
-        str(item.get("ID")) == str(row.get("ID")) and str(item.get("SMILES", "")) == str(row.get("SMILES", ""))
-        for item in selected_data
-    )
-    if same_id_smiles_exists:
-        return selected_data, f"ID {row.get('ID')} with same SMILES already exists in Selected table."
-    selected_data.append(row)
-    return selected_data, f"Added molecule ID {row.get('ID')}."
+    added = 0
+    for idx in selected_rows:
+        if idx >= len(table_data):
+            continue
+        row = table_data[idx]
+        same_id_smiles_exists = any(
+            str(item.get("ID")) == str(row.get("ID")) and str(item.get("SMILES", "")) == str(row.get("SMILES", ""))
+            for item in selected_data
+        )
+        if not same_id_smiles_exists:
+            selected_data.append(row)
+            added += 1
+    return selected_data, f"Added {added} row(s) to Selected table."
 
 
 @app.callback(
