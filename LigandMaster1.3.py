@@ -175,7 +175,17 @@ def build_table_columns(local_df):
             })
         else:
             t_cols.append({"name": c, "id": c})
-    return n_cols, [{'label': c, 'value': c} for c in n_cols], t_cols
+    add_col = {"name": "Add", "id": "__add__"}
+    return n_cols, [{'label': c, 'value': c} for c in n_cols], [add_col] + t_cols
+
+
+def with_add_marker(records):
+    out = []
+    for row in records:
+        r = dict(row)
+        r["__add__"] = "☐"
+        out.append(r)
+    return out
 
 
 numeric_cols, dropdown_options, table_columns = build_table_columns(df)
@@ -351,7 +361,7 @@ app.layout = html.Div(
         html.Div(
             style={"padding": "0 8px 8px 8px"},
             children=[
-                html.Span("Use table checkboxes to copy rows to Selected Molecules.", style={"fontSize": "12px", "color": "#555"}),
+                html.Span("Circle = select row for 2D view, square(Add) = copy row to Selected Molecules.", style={"fontSize": "12px", "color": "#555"}),
                 html.Span(id="copy-row-status", style={"marginLeft": "10px", "fontSize": "12px", "color": "#555"})
             ]
         ),
@@ -592,12 +602,12 @@ app.layout = html.Div(
                                                 dash_table.DataTable(
                                                     id="molecules-table",
                                                     columns=[col for col in table_columns[:4]],
-                                                    data=df.head(25).to_dict("records"),
+                                                    data=with_add_marker(df.head(25).to_dict("records")),
                                                     page_size=25,
                                                     filter_action="native",
                                                     sort_action="native",
                                                     sort_mode="multi",
-                                                    row_selectable="multi",
+                                                    row_selectable="single",
                                                     selected_rows=[0],
                                                     style_table={"flex": "1", "height": "100%", "overflowY": "auto", "overflowX": "auto"},
                                                     style_header={
@@ -778,7 +788,7 @@ def upload_csv(contents, filename):
 
         return (
             f"✅ Загружен файл: {filename}",
-            df.head(25).to_dict("records"),
+            with_add_marker(df.head(25).to_dict("records")),
             [col for col in table_columns[:4]],
             column_options,
             selected_columns,
@@ -930,28 +940,27 @@ def switch_page(active_tab):
 @app.callback(
     Output("selected-molecules-store", "data"),
     Output("copy-row-status", "children"),
-    Input("molecules-table", "selected_rows"),
+    Input("molecules-table", "active_cell"),
     State("molecules-table", "data"),
     State("selected-molecules-store", "data"),
     prevent_initial_call=True
 )
-def copy_selected_row(selected_rows, table_data, selected_data):
-    if not selected_rows or not table_data:
-        return selected_data, "No rows selected."
+def copy_selected_row(active_cell, table_data, selected_data):
+    if not active_cell or active_cell.get("column_id") != "__add__" or not table_data:
+        return selected_data, no_update
     selected_data = selected_data or []
-    added = 0
-    for idx in selected_rows:
-        if idx >= len(table_data):
-            continue
-        row = table_data[idx]
-        same_id_smiles_exists = any(
-            str(item.get("ID")) == str(row.get("ID")) and str(item.get("SMILES", "")) == str(row.get("SMILES", ""))
-            for item in selected_data
-        )
-        if not same_id_smiles_exists:
-            selected_data.append(row)
-            added += 1
-    return selected_data, f"Added {added} row(s) to Selected table."
+    idx = active_cell.get("row")
+    if idx is None or idx >= len(table_data):
+        return selected_data, "Invalid row."
+    row = {k: v for k, v in table_data[idx].items() if k != "__add__"}
+    same_id_smiles_exists = any(
+        str(item.get("ID")) == str(row.get("ID")) and str(item.get("SMILES", "")) == str(row.get("SMILES", ""))
+        for item in selected_data
+    )
+    if same_id_smiles_exists:
+        return selected_data, f"ID {row.get('ID')} with same SMILES already exists."
+    selected_data.append(row)
+    return selected_data, f"Added molecule ID {row.get('ID')}."
 
 
 @app.callback(
@@ -1125,13 +1134,13 @@ def update_slider_label(val):
 def update_table_rows(slider_value, slider_mode, n_clicks):
     if slider_mode == "rows":
         n_rows = int(len(df) * slider_value / 100)
-        return df.head(n_rows).to_dict("records")
+        return with_add_marker(df.head(n_rows).to_dict("records"))
     elif slider_mode in numeric_cols:
         tdf = df.sort_values(slider_mode, ascending=False)
         n_rows = int(len(df) * slider_value / 100)
-        return tdf.head(n_rows).to_dict("records")
+        return with_add_marker(tdf.head(n_rows).to_dict("records"))
     else:
-        return df.to_dict("records")
+        return with_add_marker(df.to_dict("records"))
 
 
 @app.callback(
