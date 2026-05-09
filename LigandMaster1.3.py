@@ -940,6 +940,7 @@ def switch_page(active_tab):
 @app.callback(
     Output("selected-molecules-store", "data"),
     Output("copy-row-status", "children"),
+    Output("molecules-table", "data", allow_duplicate=True),
     Input("molecules-table", "active_cell"),
     State("molecules-table", "data"),
     State("selected-molecules-store", "data"),
@@ -947,20 +948,28 @@ def switch_page(active_tab):
 )
 def copy_selected_row(active_cell, table_data, selected_data):
     if not active_cell or active_cell.get("column_id") != "__add__" or not table_data:
-        return selected_data, no_update
+        return selected_data, no_update, no_update
     selected_data = selected_data or []
     idx = active_cell.get("row")
     if idx is None or idx >= len(table_data):
-        return selected_data, "Invalid row."
+        return selected_data, "Invalid row.", no_update
     row = {k: v for k, v in table_data[idx].items() if k != "__add__"}
-    same_id_smiles_exists = any(
-        str(item.get("ID")) == str(row.get("ID")) and str(item.get("SMILES", "")) == str(row.get("SMILES", ""))
-        for item in selected_data
+    key_id = str(row.get("ID"))
+    key_smiles = str(row.get("SMILES", ""))
+    existing_index = next(
+        (i for i, item in enumerate(selected_data)
+         if str(item.get("ID")) == key_id and str(item.get("SMILES", "")) == key_smiles),
+        None
     )
-    if same_id_smiles_exists:
-        return selected_data, f"ID {row.get('ID')} with same SMILES already exists."
+    updated_table_data = [dict(r) for r in table_data]
+    if existing_index is not None:
+        selected_data.pop(existing_index)
+        updated_table_data[idx]["__add__"] = "☐"
+        return selected_data, f"Removed molecule ID {row.get('ID')} from Selected table.", updated_table_data
+
     selected_data.append(row)
-    return selected_data, f"Added molecule ID {row.get('ID')}."
+    updated_table_data[idx]["__add__"] = "☑"
+    return selected_data, f"Added molecule ID {row.get('ID')} to Selected table.", updated_table_data
 
 
 @app.callback(
