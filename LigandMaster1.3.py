@@ -183,7 +183,7 @@ def with_add_marker(records):
     out = []
     for row in records:
         r = dict(row)
-        r["__add__"] = "☐"
+        r["__add__"] = "⬜"
         out.append(r)
     return out
 
@@ -631,7 +631,22 @@ app.layout = html.Div(
                                                         'border': '1px solid #dee2e6'
                                                     },
                                                     style_data_conditional=[
-                                                        {'if': {'row_index': 'odd'}, 'backgroundColor': '#f8f9fa'}
+                                                        {'if': {'row_index': 'odd'}, 'backgroundColor': '#f8f9fa'},
+                                                        {
+                                                            'if': {'column_id': '__add__'},
+                                                            'textAlign': 'center',
+                                                            'fontSize': '18px',
+                                                            'padding': '0px',
+                                                        },
+                                                    ],
+                                                    style_cell_conditional=[
+                                                        {
+                                                            'if': {'column_id': '__add__'},
+                                                            'width': '42px',
+                                                            'minWidth': '42px',
+                                                            'maxWidth': '42px',
+                                                            'textAlign': 'center',
+                                                        }
                                                     ],
                                                     virtualization=True
                                                 ),
@@ -964,11 +979,11 @@ def copy_selected_row(active_cell, table_data, selected_data):
     updated_table_data = [dict(r) for r in table_data]
     if existing_index is not None:
         selected_data.pop(existing_index)
-        updated_table_data[idx]["__add__"] = "☐"
+        updated_table_data[idx]["__add__"] = "⬜"
         return selected_data, f"Removed molecule ID {row.get('ID')} from Selected table.", updated_table_data
 
     selected_data.append(row)
-    updated_table_data[idx]["__add__"] = "☑"
+    updated_table_data[idx]["__add__"] = "✅"
     return selected_data, f"Added molecule ID {row.get('ID')} to Selected table.", updated_table_data
 
 
