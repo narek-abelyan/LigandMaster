@@ -942,8 +942,12 @@ def copy_selected_row(n_clicks, selected_rows, table_data, selected_data):
         return selected_data, "No row selected."
     row = table_data[selected_rows[0]]
     selected_data = selected_data or []
-    if any(str(item.get("ID")) == str(row.get("ID")) for item in selected_data):
-        return selected_data, f"ID {row.get('ID')} already exists in Selected table."
+    same_id_smiles_exists = any(
+        str(item.get("ID")) == str(row.get("ID")) and str(item.get("SMILES", "")) == str(row.get("SMILES", ""))
+        for item in selected_data
+    )
+    if same_id_smiles_exists:
+        return selected_data, f"ID {row.get('ID')} with same SMILES already exists in Selected table."
     selected_data.append(row)
     return selected_data, f"Added molecule ID {row.get('ID')}."
 
