@@ -959,12 +959,24 @@ def copy_selected_row(n_clicks, selected_rows, table_data, selected_data):
     Input("column-selector", "value")
 )
 def refresh_selected_table(selected_data, selected_columns):
-    cols = [col for col in table_columns if col['id'] in (selected_columns or [])]
-    if not cols:
-        cols = [col for col in table_columns[:4]]
-    visible_ids = [c["id"] for c in cols]
-    filtered_data = [{k: v for k, v in row.items() if k in visible_ids} for row in (selected_data or [])]
-    return filtered_data, cols
+    selected_data = selected_data or []
+    if not selected_data:
+        cols = [col for col in table_columns if col['id'] in (selected_columns or [])]
+        if not cols:
+            cols = [col for col in table_columns[:4]]
+        return [], cols
+
+    # Сохраняем все колонки, которые когда-либо попали в selected_data (включая из других CSV)
+    all_keys = []
+    for row in selected_data:
+        for key in row.keys():
+            if key not in all_keys:
+                all_keys.append(key)
+
+    preferred_order = selected_columns or []
+    ordered_keys = [k for k in preferred_order if k in all_keys] + [k for k in all_keys if k not in preferred_order]
+    cols = [{"name": k, "id": k} for k in ordered_keys]
+    return selected_data, cols
 
 
 @app.callback(
