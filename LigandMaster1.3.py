@@ -357,7 +357,7 @@ app.layout = html.Div(
         ),
         html.Div(
             id="main-page-container",
-            style={"display": "block"},
+            style={"display": "block", "height": "85vh"},
             children=[PanelGroup(
                 direction="horizontal",
                 children=[
@@ -924,8 +924,8 @@ def sync_table_selection(scatter_click, slider_value, slider_mode):
 )
 def switch_page(active_tab):
     if active_tab == "selected-page":
-        return {"display": "none"}, {"display": "none"}, {"display": "block", "height": "85vh", "padding": "8px"}
-    return {"display": "block"}, {"display": "inline-block"}, {"display": "none", "height": "85vh", "padding": "8px"}
+        return {"display": "none", "height": "85vh"}, {"display": "none"}, {"display": "block", "height": "85vh", "padding": "8px"}
+    return {"display": "block", "height": "85vh"}, {"display": "inline-block"}, {"display": "none", "height": "85vh", "padding": "8px"}
 
 
 @app.callback(
