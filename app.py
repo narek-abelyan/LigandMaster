@@ -78,7 +78,7 @@ def parse_uploaded_csv(contents: str) -> pd.DataFrame:
 
 
 # ========== Загрузка данных ==========
-df = prepare_df(pd.read_csv(CSV_PATH, sep=";"))
+df = prepare_df(pd.read_csv(CSV_PATH, sep=None, engine="python"))
 
 numeric_cols = df.select_dtypes(include='number').columns.tolist()
 dropdown_options = [{'label': c, 'value': c} for c in numeric_cols]
@@ -152,12 +152,12 @@ extra_properties = {
 
 extra_property_options = [{'label': name, 'value': name} for name in extra_properties.keys()]
 extra_property_groups = {
-    "Липофильность / полярность": ["MolLogP", "ExactMolWt", "MolWt", "TPSA", "MolMR"],
-    "H-bond свойства": ["NumHDonors", "NumHAcceptors"],
-    "Размер и состав": ["NumValenceElectrons", "HeavyAtomMolWt", "HeavyAtomCount"],
-    "Кольца / гибкость": ["NumRotatableBonds", "RingCount", "NumSaturatedRings", "FractionCSP3", "NumAromaticRings", "NumAliphaticRings"],
+    "Lipophilicity / polarity": ["MolLogP", "ExactMolWt", "MolWt", "TPSA", "MolMR"],
+    "H-bond properties": ["NumHDonors", "NumHAcceptors"],
+    "Size and composition": ["NumValenceElectrons", "HeavyAtomMolWt", "HeavyAtomCount"],
+    "Rings / flexibility": ["NumRotatableBonds", "RingCount", "NumSaturatedRings", "FractionCSP3", "NumAromaticRings", "NumAliphaticRings"],
     "Drug-likeness": ["QED"],
-    "Топология / сложность": ["BertzCT", "BalabanJ", "Chi0v", "Chi1v", "Chi2v", "Chi3v", "Chi4v", "Kappa1", "Kappa2", "Kappa3"],
+    "Topology / complexity": ["BertzCT", "BalabanJ", "Chi0v", "Chi1v", "Chi2v", "Chi3v", "Chi4v", "Kappa1", "Kappa2", "Kappa3"],
 }
 
 
@@ -175,7 +175,29 @@ def build_table_columns(local_df):
             })
         else:
             t_cols.append({"name": c, "id": c})
-    return n_cols, [{'label': c, 'value': c} for c in n_cols], t_cols
+    add_col = {"name": "S", "id": "__add__"}
+    return n_cols, [{'label': c, 'value': c} for c in n_cols], [add_col] + t_cols
+
+
+def with_add_marker(records):
+    out = []
+    for row in records:
+        r = dict(row)
+        r["__add__"] = "⬜"
+        out.append(r)
+    return out
+
+
+def apply_selected_markers(records, selected_data):
+    selected_data = selected_data or []
+    selected_keys = {(str(r.get("ID")), str(r.get("SMILES", ""))) for r in selected_data}
+    out = []
+    for row in records:
+        r = dict(row)
+        key = (str(r.get("ID")), str(r.get("SMILES", "")))
+        r["__add__"] = "✅" if key in selected_keys else "⬜"
+        out.append(r)
+    return out
 
 
 numeric_cols, dropdown_options, table_columns = build_table_columns(df)
@@ -198,6 +220,15 @@ def smiles_to_base64(smiles, img_size=(800, 600)):
     except Exception:
         img = Image.new("RGB", img_size, (255, 255, 255))
     return pil_to_b64(img)
+
+
+def smiles_to_thumb_md(smiles, size=(120, 80)):
+    return f"![mol]({smiles_to_base64(smiles, img_size=size)})"
+
+
+def smiles_to_thumb_html(smiles, size=(120, 80)):
+    src = smiles_to_base64(smiles, img_size=(220, 160))
+    return f"<img src='{src}' style='height:90px; width:130px; object-fit:contain; image-rendering:auto;'/>"
 
 
 # ========== Инициализация Dash ==========
@@ -242,6 +273,10 @@ app.index_string = '''
                 background-color: #f8f9fb;
                 margin: 0;
                 padding: 0;
+                overflow: hidden;
+            }
+            html, body {
+                height: 100%;
             }
             .dash-slider {
                 width: 100%;
@@ -322,7 +357,7 @@ def make_pretty_hist(df, x, color, title, nbinsx=40, compute_kde=False):
 
     fig.update_layout(
         title=dict(text=title, x=0.5, font=dict(size=16)),
-        margin=dict(l=10, r=10, t=40, b=60),
+        margin=dict(l=45, r=10, t=40, b=60),
         plot_bgcolor='rgba(255,255,255,1)',
         paper_bgcolor='rgba(255,255,255,1)',
         font=dict(family="Segoe UI", size=12),
@@ -343,22 +378,27 @@ app.layout = html.Div(
             id="page-tabs",
             value="main-page",
             children=[
-                dcc.Tab(label="Main Page", value="main-page"),
-                dcc.Tab(label="Selected Molecules", value="selected-page"),
+                dcc.Tab(
+                    label="Main Page",
+                    value="main-page",
+                    style={"height": "42px", "display": "flex", "alignItems": "center", "justifyContent": "center"},
+                    selected_style={"height": "42px", "display": "flex", "alignItems": "center", "justifyContent": "center", "fontWeight": "600"}
+                ),
+                dcc.Tab(
+                    label="Selected Molecules",
+                    value="selected-page",
+                    style={"height": "42px", "display": "flex", "alignItems": "center", "justifyContent": "center"},
+                    selected_style={"height": "42px", "display": "flex", "alignItems": "center", "justifyContent": "center", "fontWeight": "600"}
+                ),
             ],
-            style={"padding": "0 8px", "backgroundColor": "#ffffff"}
+            style={"padding": "0 4px", "backgroundColor": "#ffffff", "height": "44px"}
         ),
         html.Div(
-            style={"padding": "0 8px 8px 8px"},
-            children=[
-                dbc.Button("Copy selected row to Selected table", id="copy-row-btn", color="success", size="sm"),
-                html.Span(id="copy-row-status", style={"marginLeft": "10px", "fontSize": "12px", "color": "#555"})
-            ]
-        ),
-        PanelGroup(
-            id="main-panel-group",
-            direction="horizontal",
-            children=[
+            id="main-page-container",
+            style={"display": "block", "height": "calc(100vh - 56px)"},
+            children=[PanelGroup(
+                direction="horizontal",
+                children=[
                 Panel(
                     defaultSizePercentage=70,
                     minSizePixels=400,
@@ -466,12 +506,12 @@ app.layout = html.Div(
                                                     children=[
                                                         dcc.Upload(
                                                             id='upload-data',
-                                                            children=dbc.Button("Загрузить свой CSV", color="secondary", size="sm"),
+                                                            children=dbc.Button("Upload CSV", color="secondary", size="sm"),
                                                             multiple=False
                                                         ),
-                                                        html.Div(id="upload-status", children="Используется CSV по умолчанию", style={"fontSize": "12px", "color": "#555"}),
+                                                        html.Div(id="upload-status", children="Using default CSV", style={"fontSize": "12px", "color": "#555"}),
                                                         dbc.DropdownMenu(
-                                                            label="Выбрать колонки",
+                                                            label="Select columns",
                                                             children=[
                                                                 dbc.Checklist(
                                                                     id="select-all-toggle",
@@ -483,7 +523,7 @@ app.layout = html.Div(
                                                                 dbc.Checklist(
                                                                     id="column-selector",
                                                                     options=[{'label': col['name'], 'value': col['id']} for col in table_columns],
-                                                                    value=[col['id'] for col in table_columns[:4]],
+                                                                    value=[col['id'] for col in table_columns],
                                                                     inline=False,
                                                                     style={"maxHeight": "300px", "overflowY": "auto"}
                                                                 )
@@ -492,41 +532,41 @@ app.layout = html.Div(
                                                             size="sm"
                                                         ),
                                                         dbc.DropdownMenu(
-                                                            label="Рассчитать дополнительные свойства",
+                                                            label="Calculate properties",
                                                             color="primary",
                                                             size="sm",
                                                             children=[
                                                                 html.Div(
                                                                     style={"maxHeight": "340px", "overflowY": "auto"},
                                                                     children=[
-                                                                        html.Div("Липофильность / полярность", style={"fontWeight": "bold", "padding": "0 8px"}),
+                                                                        html.Div("Lipophilicity / polarity", style={"fontWeight": "bold", "padding": "0 8px"}),
                                                                         dbc.Checklist(
                                                                             id="extra-props-lipo",
-                                                                            options=[{'label': name, 'value': name} for name in extra_property_groups["Липофильность / полярность"]],
+                                                                            options=[{'label': name, 'value': name} for name in extra_property_groups["Lipophilicity / polarity"]],
                                                                             value=[],
                                                                             inline=False,
                                                                             style={"padding": "0 8px"}
                                                                         ),
-                                                                        html.Div("H-bond свойства", style={"fontWeight": "bold", "padding": "8px 8px 0 8px"}),
+                                                                        html.Div("H-bond properties", style={"fontWeight": "bold", "padding": "8px 8px 0 8px"}),
                                                                         dbc.Checklist(
                                                                             id="extra-props-hbond",
-                                                                            options=[{'label': name, 'value': name} for name in extra_property_groups["H-bond свойства"]],
+                                                                            options=[{'label': name, 'value': name} for name in extra_property_groups["H-bond properties"]],
                                                                             value=[],
                                                                             inline=False,
                                                                             style={"padding": "0 8px"}
                                                                         ),
-                                                                        html.Div("Размер и состав", style={"fontWeight": "bold", "padding": "8px 8px 0 8px"}),
+                                                                        html.Div("Size and composition", style={"fontWeight": "bold", "padding": "8px 8px 0 8px"}),
                                                                         dbc.Checklist(
                                                                             id="extra-props-size",
-                                                                            options=[{'label': name, 'value': name} for name in extra_property_groups["Размер и состав"]],
+                                                                            options=[{'label': name, 'value': name} for name in extra_property_groups["Size and composition"]],
                                                                             value=[],
                                                                             inline=False,
                                                                             style={"padding": "0 8px"}
                                                                         ),
-                                                                        html.Div("Кольца / гибкость", style={"fontWeight": "bold", "padding": "8px 8px 0 8px"}),
+                                                                        html.Div("Rings / flexibility", style={"fontWeight": "bold", "padding": "8px 8px 0 8px"}),
                                                                         dbc.Checklist(
                                                                             id="extra-props-rings",
-                                                                            options=[{'label': name, 'value': name} for name in extra_property_groups["Кольца / гибкость"]],
+                                                                            options=[{'label': name, 'value': name} for name in extra_property_groups["Rings / flexibility"]],
                                                                             value=[],
                                                                             inline=False,
                                                                             style={"padding": "0 8px"}
@@ -539,10 +579,10 @@ app.layout = html.Div(
                                                                             inline=False,
                                                                             style={"padding": "0 8px"}
                                                                         ),
-                                                                        html.Div("Топология / сложность", style={"fontWeight": "bold", "padding": "8px 8px 0 8px"}),
+                                                                        html.Div("Topology / complexity", style={"fontWeight": "bold", "padding": "8px 8px 0 8px"}),
                                                                         dbc.Checklist(
                                                                             id="extra-props-topology",
-                                                                            options=[{'label': name, 'value': name} for name in extra_property_groups["Топология / сложность"]],
+                                                                            options=[{'label': name, 'value': name} for name in extra_property_groups["Topology / complexity"]],
                                                                             value=[],
                                                                             inline=False,
                                                                             style={"padding": "0 8px 8px 8px"}
@@ -551,7 +591,7 @@ app.layout = html.Div(
                                                                 ),
                                                                 html.Hr(style={"margin": "8px 0"}),
                                                                 dbc.Button(
-                                                                    "Рассчитать выбранные",
+                                                                    "Calculate selected",
                                                                     id="calculate-extra-props-btn",
                                                                     color="success",
                                                                     size="sm",
@@ -564,7 +604,7 @@ app.layout = html.Div(
                                                             children=[
                                                                 dcc.Dropdown(
                                                                     id="slider-mode-dropdown",
-                                                                    options=[{"label": "По количеству строк", "value": "rows"}] + dropdown_options,
+                                                                    options=[{"label": "By row count", "value": "rows"}] + dropdown_options,
                                                                     value="rows",
                                                                     style={"width": "160px", "fontSize": "12px"}
                                                                 ),
@@ -587,17 +627,25 @@ app.layout = html.Div(
                                                         )
                                                     ]
                                                 ),
+                                                html.Div(
+                                                    style={"padding": "2px 2px", "fontSize": "12px", "color": "#555"},
+                                                    children=[
+                                                        html.Span("Circle = select row for 2D view, square(S) = copy row to Selected Molecules."),
+                                                        html.Span(id="copy-row-status", style={"marginLeft": "8px"})
+                                                    ]
+                                                ),
                                                 dash_table.DataTable(
                                                     id="molecules-table",
-                                                    columns=[col for col in table_columns[:4]],
-                                                    data=df.head(25).to_dict("records"),
-                                                    page_size=25,
+                                                    columns=[col for col in table_columns],
+                                                    data=with_add_marker(df.head(10).to_dict("records")),
+                                                    page_size=10,
                                                     filter_action="native",
                                                     sort_action="native",
                                                     sort_mode="multi",
                                                     row_selectable="single",
                                                     selected_rows=[0],
-                                                    style_table={"flex": "1", "height": "100%", "overflowY": "auto", "overflowX": "auto"},
+                                                    style_table={"overflowX": "auto", "overflowY": "hidden"},
+                                                    fill_width=False,
                                                     style_header={
                                                         'backgroundColor': '#f8f9fa',
                                                         'fontWeight': 'bold',
@@ -609,19 +657,37 @@ app.layout = html.Div(
                                                     },
                                                     style_cell={
                                                         'textAlign': 'left',
-                                                        'padding': '8px',
+                                                        'padding': '6px',
                                                         'fontSize': '12px',
-                                                        'minWidth': '60px',
-                                                        'maxWidth': '300px',
+                                                        'width': 'auto',
+                                                        'minWidth': '40px',
+                                                        'maxWidth': '180px',
                                                         'whiteSpace': 'nowrap',
                                                         'overflow': 'hidden',
                                                         'textOverflow': 'ellipsis',
-                                                        'border': '1px solid #dee2e6'
+                                                        'border': '1px solid #dee2e6',
+                                                        'lineHeight': '20px'
                                                     },
                                                     style_data_conditional=[
-                                                        {'if': {'row_index': 'odd'}, 'backgroundColor': '#f8f9fa'}
+                                                        {'if': {'row_index': 'odd'}, 'backgroundColor': '#f8f9fa'},
+                                                        {
+                                                            'if': {'column_id': '__add__'},
+                                                            'textAlign': 'center',
+                                                            'fontSize': '18px',
+                                                            'padding': '0px',
+                                                        },
                                                     ],
-                                                    virtualization=True
+                                                    style_cell_conditional=[
+                                                        {
+                                                            'if': {'column_id': '__add__'},
+                                                            'width': '42px',
+                                                            'minWidth': '42px',
+                                                            'maxWidth': '42px',
+                                                            'textAlign': 'center',
+                                                        },
+                                                        {'if': {'column_id': 'ID'}, 'minWidth': '55px', 'maxWidth': '80px', 'width': '70px'}
+                                                    ],
+                                                    virtualization=False
                                                 ),
                                                 html.Div(
                                                     id="table-status-label",
@@ -712,26 +778,82 @@ app.layout = html.Div(
                     ]
                 )
             ]
+            )]
         ),
         html.Div(
             id="selected-page-container",
-            style={"display": "none", "height": "85vh", "padding": "8px"},
+            style={"display": "none", "height": "calc(100vh - 56px)", "padding": "8px"},
             children=[
+                dcc.Download(id="selected-download"),
                 html.Div(style={"height": "100%", "display": "flex", "gap": "10px"}, children=[
-                    html.Div(style={"flex": 2}, children=[
+                    html.Div(style={"flex": "0 0 80%", "maxWidth": "80%", "display": "flex", "flexDirection": "column", "height": "100%"}, children=[
+                        html.Div(
+                            style={"display": "flex", "gap": "8px", "marginBottom": "8px", "alignItems": "center"},
+                            children=[
+                                dbc.DropdownMenu(
+                                    label="Select columns",
+                                    color="primary",
+                                    size="sm",
+                                    children=[
+                                        dbc.Checklist(
+                                            id="selected-select-all-toggle",
+                                            options=[{'label': 'Select / Unselect All', 'value': 'toggle'}],
+                                            value=["toggle"],
+                                            inline=False,
+                                            style={"padding": "6px"}
+                                        ),
+                                        dbc.Checklist(
+                                            id="selected-column-selector",
+                                            options=[],
+                                            value=[],
+                                            inline=False,
+                                            style={"maxHeight": "240px", "overflowY": "auto", "padding": "6px"}
+                                        )
+                                    ]
+                                ),
+                                dbc.Button("Delete selected row", id="delete-selected-row-btn", color="danger", size="sm"),
+                                dbc.Button("Clear All", id="clear-selected-btn", color="warning", size="sm"),
+                                dbc.Button("Remove SMILES Duplicates", id="dedup-selected-btn", color="dark", size="sm"),
+                                dbc.Button("Round numeric values", id="round-selected-btn", color="secondary", size="sm"),
+                                dcc.Dropdown(
+                                    id="round-digits-dropdown",
+                                    options=[{"label": str(i), "value": i} for i in range(0, 7)],
+                                    value=2,
+                                    clearable=False,
+                                    style={"width": "100px", "fontSize": "12px"}
+                                ),
+                                html.Span(id="selected-actions-status", style={"fontSize": "12px", "color": "#555"}),
+                                html.Div(style={"marginLeft": "auto", "display": "flex", "alignItems": "center"}, children=[
+                                    dcc.Upload(
+                                        id='upload-selected-data',
+                                        children=dbc.Button("Upload CSV", color="info", size="sm", style={"marginRight": "8px"}),
+                                        multiple=False,
+                                        style={"display": "inline-block"}
+                                    ),
+                                    dbc.Button("Download Selected CSV", id="download-selected-btn", color="success", size="sm"),
+                                ]),
+                            ]
+                        ),
                         dash_table.DataTable(
                             id="selected-molecules-table",
                             columns=[col for col in table_columns[:4]],
                             data=[],
                             page_size=15,
+                            filter_action="native",
+                            sort_action="native",
+                            sort_mode="multi",
                             row_selectable="single",
+                            cell_selectable=True,
                             selected_rows=[],
-                            style_table={"height": "100%", "overflowY": "auto", "overflowX": "auto"},
+                            style_table={"width": "100%", "height": "100%", "maxHeight": "100%", "overflowY": "auto", "overflowX": "auto"},
                             style_header={'backgroundColor': '#f8f9fa', 'fontWeight': 'bold'},
-                            style_cell={'textAlign': 'left', 'padding': '8px', 'fontSize': '12px'}
+                            style_cell={'textAlign': 'left', 'padding': '8px', 'fontSize': '12px'},
+                            style_data_conditional=[{'if': {'row_index': 'odd'}, 'backgroundColor': '#f8f9fa'}],
+                            virtualization=False,
+                            markdown_options={"html": True}
                         )
                     ]),
-                    html.Div(style={"flex": 1, "border": "1px solid #e5e7eb", "borderRadius": "8px", "display": "flex",
+                    html.Div(style={"flex": "0 0 20%", "maxWidth": "20%", "border": "1px solid #e5e7eb", "borderRadius": "8px", "display": "flex",
                                     "justifyContent": "center", "alignItems": "center", "backgroundColor": "#fff"}, children=[
                         html.Div(id="selected-img-container")
                     ])
@@ -758,9 +880,11 @@ app.layout = html.Div(
     Output("slider-mode-dropdown", "options", allow_duplicate=True),
     Input("upload-data", "contents"),
     State("upload-data", "filename"),
+    State("table-row-slider", "value"),
+    State("slider-mode-dropdown", "value"),
     prevent_initial_call=True
 )
-def upload_csv(contents, filename):
+def upload_csv(contents, filename, slider_value, slider_mode):
     global df, numeric_cols, dropdown_options, table_columns
     if not contents:
         return no_update
@@ -769,14 +893,24 @@ def upload_csv(contents, filename):
         df = parse_uploaded_csv(contents)
         numeric_cols, dropdown_options, table_columns = build_table_columns(df)
         column_options = [{'label': col['name'], 'value': col['id']} for col in table_columns]
-        selected_columns = [col['id'] for col in table_columns[:4]]
+        selected_columns = [col['id'] for col in table_columns]
         scatter_color_options = [{'label': 'None', 'value': ''}] + dropdown_options
-        slider_options = [{"label": "По количеству строк", "value": "rows"}] + dropdown_options
+        slider_options = [{"label": "By row count", "value": "rows"}] + dropdown_options
+
+        if slider_mode == "rows":
+            n_rows = max(1, int(len(df) * (slider_value or 100) / 100))
+            table_data = with_add_marker(df.head(n_rows).to_dict("records"))
+        elif slider_mode in numeric_cols:
+            tdf = df.sort_values(slider_mode, ascending=False)
+            n_rows = max(1, int(len(df) * (slider_value or 100) / 100))
+            table_data = with_add_marker(tdf.head(n_rows).to_dict("records"))
+        else:
+            table_data = with_add_marker(df.to_dict("records"))
 
         return (
-            f"✅ Загружен файл: {filename}",
-            df.head(25).to_dict("records"),
-            [col for col in table_columns[:4]],
+            f"✅ Uploaded file: {filename}",
+            table_data,
+            [col for col in table_columns],
             column_options,
             selected_columns,
             dropdown_options,
@@ -787,7 +921,7 @@ def upload_csv(contents, filename):
             slider_options,
         )
     except Exception as e:
-        return f"❌ Ошибка загрузки CSV: {e}", no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update
+        return f"❌ CSV upload error: {e}", no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update
 
 
 # ---------- 1. Toggle Select / Unselect All ----------
@@ -865,7 +999,7 @@ def calculate_extra_properties(n_clicks, lipo_vals, hbond_vals, size_vals, rings
 
     numeric_dropdown = dropdown_options
     color_dropdown = [{'label': 'None', 'value': ''}] + numeric_dropdown
-    slider_dropdown = [{"label": "По количеству строк", "value": "rows"}] + numeric_dropdown
+    slider_dropdown = [{"label": "By row count", "value": "rows"}] + numeric_dropdown
 
     return (
         new_column_options,
@@ -887,77 +1021,291 @@ def calculate_extra_properties(n_clicks, lipo_vals, hbond_vals, size_vals, rings
 # ---------- 2. Синхронизация клика по scatter с таблицей ----------
 @app.callback(
     Output("molecules-table", "selected_rows"),
+    Output("molecules-table", "page_current"),
     Input("scatter-graph", "clickData"),
     Input("table-row-slider", "value"),
-    Input("slider-mode-dropdown", "value")
+    Input("slider-mode-dropdown", "value"),
+    State("molecules-table", "data")
 )
-def sync_table_selection(scatter_click, slider_value, slider_mode):
+def sync_table_selection(scatter_click, slider_value, slider_mode, table_data):
     if slider_mode == "rows":
-        n_rows = int(len(df) * slider_value / 100)
+        n_rows = max(1, int(len(df) * slider_value / 100))
         tdf = df.head(n_rows)
     elif slider_mode in numeric_cols:
         tdf = df.sort_values(slider_mode, ascending=False)
-        n_rows = int(len(df) * slider_value / 100)
+        n_rows = max(1, int(len(df) * slider_value / 100))
         tdf = tdf.head(n_rows)
     else:
         tdf = df.copy()
 
     if scatter_click and 'points' in scatter_click:
-        clicked_id = scatter_click['points'][0]['customdata'][0]
-        matching = tdf[tdf["ID"] == str(clicked_id)]
-        if matching.empty:
-            return no_update
-        row_position = tdf.index.get_loc(matching.index[0])
-        return [row_position]
+        clicked_id = str(scatter_click['points'][0]['customdata'][0])
+        local_data = table_data or tdf.to_dict("records")
+        for i, row in enumerate(local_data):
+            if str(row.get("ID")) == clicked_id:
+                return [i], i // 10
+        return no_update, no_update
 
-    return no_update
+    return no_update, no_update
 
 
-# @app.callback(
-#     Output("main-panel-group", "style"),
-#     Output("copy-row-btn", "style"),
-#     Output("selected-page-container", "style"),
-#     Input("page-tabs", "value")
-# )
-# def switch_page(active_tab):
-#     if active_tab == "selected-page":
-#         return {"display": "none"}, {"display": "none"}, {"display": "block", "height": "85vh", "padding": "8px"}
-#     return {"display": "block"}, {"display": "inline-block"}, {"display": "none", "height": "85vh", "padding": "8px"}
+@app.callback(
+    Output("main-page-container", "style"),
+    Output("selected-page-container", "style"),
+    Input("page-tabs", "value")
+)
+def switch_page(active_tab):
+    if active_tab == "selected-page":
+        return {"display": "block", "height": "0", "overflow": "hidden"}, {"display": "block", "height": "calc(100vh - 56px)", "padding": "8px"}
+    return {"display": "block", "height": "calc(100vh - 56px)", "overflow": "visible"}, {"display": "none", "height": "calc(100vh - 56px)", "padding": "8px"}
 
 
 @app.callback(
     Output("selected-molecules-store", "data"),
     Output("copy-row-status", "children"),
-    Input("copy-row-btn", "n_clicks"),
-    State("molecules-table", "selected_rows"),
+    Output("molecules-table", "data", allow_duplicate=True),
+    Output("molecules-table", "active_cell", allow_duplicate=True),
+    Input("molecules-table", "active_cell"),
     State("molecules-table", "data"),
+    State("molecules-table", "derived_viewport_data"),
     State("selected-molecules-store", "data"),
     prevent_initial_call=True
 )
-def copy_selected_row(n_clicks, selected_rows, table_data, selected_data):
-    if not n_clicks or not selected_rows or not table_data:
-        return selected_data, "No row selected."
-    row = table_data[selected_rows[0]]
+def copy_selected_row(active_cell, table_data, viewport_data, selected_data):
+    if not active_cell or active_cell.get("column_id") != "__add__" or not table_data:
+        return selected_data, no_update, no_update, no_update
     selected_data = selected_data or []
-    if any(str(item.get("ID")) == str(row.get("ID")) for item in selected_data):
-        return selected_data, f"ID {row.get('ID')} already exists in Selected table."
+    idx = active_cell.get("row")
+    if idx is None or viewport_data is None or idx >= len(viewport_data):
+        return selected_data, "Invalid row.", no_update, None
+    row = {k: v for k, v in viewport_data[idx].items() if k != "__add__"}
+    key_id = str(row.get("ID"))
+    key_smiles = str(row.get("SMILES", ""))
+    existing_index = next(
+        (i for i, item in enumerate(selected_data)
+         if str(item.get("ID")) == key_id and str(item.get("SMILES", "")) == key_smiles),
+        None
+    )
+    updated_table_data = [dict(r) for r in (table_data or [])]
+    global_idx = next(
+        (i for i, r in enumerate(updated_table_data)
+         if str(r.get("ID")) == key_id and str(r.get("SMILES", "")) == key_smiles),
+        None
+    )
+    if existing_index is not None:
+        selected_data.pop(existing_index)
+        if global_idx is not None and global_idx < len(updated_table_data):
+            updated_table_data[global_idx]["__add__"] = "⬜"
+        return selected_data, f"Removed molecule ID {row.get('ID')} from Selected table.", updated_table_data, None
+
     selected_data.append(row)
-    return selected_data, f"Added molecule ID {row.get('ID')}."
+    if global_idx is not None and global_idx < len(updated_table_data):
+        updated_table_data[global_idx]["__add__"] = "✅"
+    return selected_data, f"Added molecule ID {row.get('ID')} to Selected table.", updated_table_data, None
 
 
 @app.callback(
     Output("selected-molecules-table", "data"),
     Output("selected-molecules-table", "columns"),
     Input("selected-molecules-store", "data"),
-    Input("column-selector", "value")
+    Input("selected-column-selector", "value")
 )
 def refresh_selected_table(selected_data, selected_columns):
-    cols = [col for col in table_columns if col['id'] in (selected_columns or [])]
-    if not cols:
-        cols = [col for col in table_columns[:4]]
-    visible_ids = [c["id"] for c in cols]
-    filtered_data = [{k: v for k, v in row.items() if k in visible_ids} for row in (selected_data or [])]
-    return filtered_data, cols
+    selected_data = selected_data or []
+    if not selected_data:
+        cols = [col for col in table_columns if col['id'] in (selected_columns or [])]
+        if not cols:
+            cols = [col for col in table_columns[:4]]
+        return [], cols
+
+    enriched = []
+    for row in selected_data:
+        rr = dict(row)
+        rr["2DMol"] = smiles_to_thumb_html(str(row.get("SMILES", "")))
+        enriched.append(rr)
+
+    # Сохраняем все колонки, которые когда-либо попали в selected_data (включая из других CSV)
+    all_keys = []
+    for row in enriched:
+        for key in row.keys():
+            if key not in all_keys:
+                all_keys.append(key)
+
+    selected_set = set(selected_columns or all_keys)
+    ordered_keys = [k for k in all_keys if k in selected_set]
+    cols = []
+    for k in ordered_keys:
+        if k == "2DMol":
+            cols.append({"name": k, "id": k, "presentation": "markdown"})
+        else:
+            cols.append({"name": k, "id": k})
+    return enriched, cols
+
+
+@app.callback(
+    Output("selected-column-selector", "options"),
+    Output("selected-column-selector", "value"),
+    Input("selected-molecules-store", "data"),
+    State("selected-column-selector", "value")
+)
+def sync_selected_column_selector(selected_data, current_value):
+    selected_data = selected_data or []
+    keys = []
+    for row in selected_data:
+        for k in row.keys():
+            if k not in keys:
+                keys.append(k)
+    if selected_data and "2DMol" not in keys:
+        keys.append("2DMol")
+    options = [{"label": k, "value": k} for k in keys]
+    if not keys:
+        return [], []
+    if not current_value:
+        return options, keys
+    valid = [v for v in current_value if v in keys]
+    return options, (valid if valid else keys)
+
+
+@app.callback(
+    Output("selected-column-selector", "value", allow_duplicate=True),
+    Output("selected-select-all-toggle", "value"),
+    Input("selected-select-all-toggle", "value"),
+    State("selected-column-selector", "options"),
+    State("selected-column-selector", "value"),
+    prevent_initial_call=True
+)
+def toggle_selected_columns(toggle_val, options, current_vals):
+    all_vals = [opt['value'] for opt in (options or [])]
+    if 'toggle' in (toggle_val or []):
+        if set(current_vals or []) == set(all_vals):
+            return [], []
+        return all_vals, ['toggle']
+    return no_update, no_update
+
+
+@app.callback(
+    Output("selected-molecules-store", "data", allow_duplicate=True),
+    Output("selected-actions-status", "children", allow_duplicate=True),
+    Input("clear-selected-btn", "n_clicks"),
+    prevent_initial_call=True
+)
+def clear_all_selected(n_clicks):
+    if not n_clicks:
+        return no_update, no_update
+    return [], "Cleared all selected molecules."
+
+
+@app.callback(
+    Output("selected-molecules-store", "data", allow_duplicate=True),
+    Output("selected-actions-status", "children", allow_duplicate=True),
+    Input("dedup-selected-btn", "n_clicks"),
+    State("selected-molecules-store", "data"),
+    prevent_initial_call=True
+)
+def dedup_selected(n_clicks, selected_data):
+    if not n_clicks:
+        return no_update, no_update
+    selected_data = selected_data or []
+    seen = set()
+    deduped = []
+    for row in selected_data:
+        raw_smiles = str(row.get("SMILES", "")).strip().replace(" ", "")
+        mol = Chem.MolFromSmiles(raw_smiles) if raw_smiles else None
+        canonical_smiles = Chem.MolToSmiles(mol, canonical=True, isomericSmiles=False) if mol is not None else raw_smiles
+        raw_key = raw_smiles.lower()
+        key = canonical_smiles.lower() if isinstance(canonical_smiles, str) else raw_key
+        if key in seen or raw_key in seen:
+            continue
+        seen.add(key)
+        seen.add(raw_key)
+        deduped.append(row)
+    removed = len(selected_data) - len(deduped)
+    return deduped, f"Removed {removed} SMILES duplicates (canonicalized with RDKit)."
+
+
+@app.callback(
+    Output("selected-molecules-store", "data", allow_duplicate=True),
+    Output("selected-actions-status", "children"),
+    Input("delete-selected-row-btn", "n_clicks"),
+    State("selected-molecules-table", "selected_rows"),
+    State("selected-molecules-store", "data"),
+    prevent_initial_call=True
+)
+def delete_selected_row(n_clicks, selected_rows, selected_data):
+    selected_data = list(selected_data or [])
+    if not n_clicks or not selected_rows:
+        return selected_data, "No row selected for deletion."
+    idx = selected_rows[0]
+    if 0 <= idx < len(selected_data):
+        removed = selected_data.pop(idx)
+        return selected_data, f"Deleted ID {removed.get('ID')}."
+    return selected_data, "Invalid row index."
+
+
+@app.callback(
+    Output("selected-download", "data"),
+    Input("download-selected-btn", "n_clicks"),
+    State("selected-molecules-store", "data"),
+    State("selected-column-selector", "value"),
+    prevent_initial_call=True
+)
+def download_selected_csv(n_clicks, selected_data, selected_columns):
+    if not n_clicks:
+        return no_update
+    selected_data = selected_data or []
+    if not selected_data:
+        return no_update
+    sdf = pd.DataFrame(selected_data)
+    if selected_columns:
+        visible_cols = [c for c in selected_columns if c in sdf.columns]
+        if visible_cols:
+            sdf = sdf[visible_cols]
+    return dcc.send_data_frame(sdf.to_csv, "selected_molecules.csv", index=False)
+
+
+@app.callback(
+    Output("selected-molecules-store", "data", allow_duplicate=True),
+    Output("selected-actions-status", "children", allow_duplicate=True),
+    Input("round-selected-btn", "n_clicks"),
+    State("round-digits-dropdown", "value"),
+    State("selected-molecules-store", "data"),
+    prevent_initial_call=True
+)
+def round_selected_values(n_clicks, digits, selected_data):
+    if not n_clicks:
+        return no_update, no_update
+    selected_data = list(selected_data or [])
+    if not selected_data:
+        return selected_data, "Selected table is empty."
+    digits = int(digits or 0)
+    rounded = []
+    for row in selected_data:
+        nr = {}
+        for k, v in row.items():
+            if isinstance(v, (int, float, np.integer, np.floating)) and not pd.isna(v):
+                nr[k] = round(float(v), digits)
+            else:
+                nr[k] = v
+        rounded.append(nr)
+    return rounded, f"Rounded numeric values to {digits} decimals."
+
+
+@app.callback(
+    Output("selected-molecules-store", "data", allow_duplicate=True),
+    Output("selected-actions-status", "children", allow_duplicate=True),
+    Input("upload-selected-data", "contents"),
+    State("upload-selected-data", "filename"),
+    prevent_initial_call=True
+)
+def upload_selected_csv(contents, filename):
+    if not contents:
+        return no_update, no_update
+    try:
+        up_df = parse_uploaded_csv(contents)
+        rows = up_df.to_dict("records")
+        return rows, f"Loaded selected table from: {filename}"
+    except Exception as e:
+        return no_update, f"Selected upload error: {e}"
 
 
 @app.callback(
@@ -982,6 +1330,7 @@ def update_selected_image(selected_rows, selected_data):
     Output("tpsa-hist-graph", "figure"),
     Output("scatter-graph", "figure"),
     Input("molecules-table", "selected_rows"),
+    Input("molecules-table", "derived_viewport_selected_rows"),
     Input("hist-col-dropdown", "value"),
     Input("scatter-x-dropdown", "value"),
     Input("scatter-y-dropdown", "value"),
@@ -994,12 +1343,28 @@ def update_selected_image(selected_rows, selected_data):
     Input("hist-nbins-input", "value"),
     Input("hist-nbins-input-2", "value"),
     Input("compute-kde-btn", "n_clicks"),
+    Input("molecules-table", "filter_query"),
+    Input("molecules-table", "data"),
+    State("molecules-table", "derived_virtual_data"),
+    State("molecules-table", "derived_viewport_data"),
 )
-def update_all(selected_rows, hist_col, scatter_x, scatter_y, tpsa_hist_col,
+def update_all(selected_rows, viewport_selected_rows, hist_col, scatter_x, scatter_y, tpsa_hist_col,
                hist_color, tpsa_hist_color, scatter_color_col, slider_value, slider_mode,
-               hist_nbins, hist_nbins2, compute_kde_clicks):
+               hist_nbins, hist_nbins2, compute_kde_clicks, filter_query, table_data, virtual_data, viewport_data):
     try:
-        if slider_mode == "rows":
+        if filter_query and virtual_data is not None:
+            tdf = pd.DataFrame(virtual_data).copy()
+            if "__add__" in tdf.columns:
+                tdf = tdf.drop(columns=["__add__"])
+            if tdf.empty:
+                tdf = df.head(1).copy()
+        elif table_data is not None:
+            tdf = pd.DataFrame(table_data).copy()
+            if "__add__" in tdf.columns:
+                tdf = tdf.drop(columns=["__add__"])
+            if tdf.empty:
+                tdf = df.head(1).copy()
+        elif slider_mode == "rows":
             n_rows = max(1, int(len(df) * slider_value / 100))
             tdf = df.head(n_rows).copy()
         elif slider_mode in numeric_cols:
@@ -1010,19 +1375,28 @@ def update_all(selected_rows, hist_col, scatter_x, scatter_y, tpsa_hist_col,
             tdf = df.copy()
 
         compute_kde = bool(compute_kde_clicks and compute_kde_clicks > 0)
+        if viewport_data is not None:
+            vdf = pd.DataFrame(viewport_data).copy()
+            if "__add__" in vdf.columns:
+                vdf = vdf.drop(columns=["__add__"])
+            if vdf.empty:
+                vdf = tdf.copy()
+        else:
+            vdf = tdf.copy()
 
+        selected_idx_list = viewport_selected_rows if viewport_selected_rows else (selected_rows or [])
         img_components = []
-        if selected_rows:
-            for sel_idx in selected_rows:
-                if sel_idx < len(tdf):
-                    row = tdf.iloc[sel_idx]
-                    smiles = row.get("SMILES", "")
+        if selected_idx_list:
+            for sel_idx in selected_idx_list:
+                if sel_idx < len(vdf):
+                    row = vdf.iloc[sel_idx]
+                    smiles = str(row.get("SMILES", ""))
                     img_b64 = smiles_to_base64(smiles)
                     img_components.append(
                         html.Img(src=img_b64, style={"maxWidth": "100%", "maxHeight": "100%", "objectFit": "contain", "margin": "4px"})
                     )
         if not img_components:
-            row = tdf.iloc[0] if len(tdf) > 0 else df.iloc[0]
+            row = vdf.iloc[0] if len(vdf) > 0 else df.iloc[0]
             img_b64 = smiles_to_base64(row.get("SMILES", ""))
             img_components.append(
                 html.Img(src=img_b64, style={"maxWidth": "100%", "maxHeight": "100%", "objectFit": "contain"})
@@ -1032,6 +1406,7 @@ def update_all(selected_rows, hist_col, scatter_x, scatter_y, tpsa_hist_col,
             img_components,
             style={"display": "flex", "flexWrap": "wrap", "justifyContent": "center", "overflowY": "auto", "height": "100%"}
         )
+
 
         safe_x = scatter_x or "MolWt"
         safe_y = scatter_y or "TPSA"
@@ -1047,9 +1422,9 @@ def update_all(selected_rows, hist_col, scatter_x, scatter_y, tpsa_hist_col,
         point_size = max(3, min(10, 5000 / len(s_tdf)))
         fig_sc.update_traces(marker=dict(size=point_size, line=dict(width=0.5, color="DarkSlateGrey"), opacity=0.6))
 
-        for sel_idx in (selected_rows or []):
-            if sel_idx < len(tdf):
-                sel_point = tdf.iloc[sel_idx]
+        for sel_idx in (selected_idx_list or []):
+            if sel_idx < len(vdf):
+                sel_point = vdf.iloc[sel_idx]
                 sel_id = str(sel_point["ID"])
                 if sel_id in s_tdf["ID"].astype(str).values:
                     fig_sc.add_trace(go.Scatter(
@@ -1063,15 +1438,15 @@ def update_all(selected_rows, hist_col, scatter_x, scatter_y, tpsa_hist_col,
                     ))
 
         fig_sc.update_layout(
-            margin=dict(l=10, r=10, t=30, b=60),
+            margin=dict(l=45, r=10, t=30, b=60),
             plot_bgcolor='rgba(250,250,250,1)',
             paper_bgcolor='rgba(250,250,250,1)'
         )
 
         fig_hist = make_pretty_hist(tdf, hist_col or "MolWt", hist_color or "#1f77b4",
-                                    f"Распределение {hist_col or 'MolWt'}", nbinsx=hist_nbins2 or 40, compute_kde=compute_kde)
+                                    f"Distribution of {hist_col or 'MolWt'}", nbinsx=hist_nbins2 or 40, compute_kde=compute_kde)
         fig_tpsa_hist = make_pretty_hist(tdf, tpsa_hist_col or "TPSA", tpsa_hist_color or "#2ca02c",
-                                         f"Распределение {tpsa_hist_col or 'TPSA'}", nbinsx=hist_nbins or 40, compute_kde=compute_kde)
+                                         f"Distribution of {tpsa_hist_col or 'TPSA'}", nbinsx=hist_nbins or 40, compute_kde=compute_kde)
 
         return img_component, fig_hist, fig_tpsa_hist, fig_sc
 
@@ -1100,30 +1475,38 @@ def update_slider_label(val):
 
 
 # ---------- 6. Данные таблицы ----------
-@app.callback(Output("molecules-table", "data", allow_duplicate=True), Input("table-row-slider", "value"), Input("slider-mode-dropdown", "value"), Input("calculate-extra-props-btn", "n_clicks"), prevent_initial_call=True)
-def update_table_rows(slider_value, slider_mode, n_clicks):
+@app.callback(
+    Output("molecules-table", "data", allow_duplicate=True),
+    Input("table-row-slider", "value"),
+    Input("slider-mode-dropdown", "value"),
+    Input("calculate-extra-props-btn", "n_clicks"),
+    State("selected-molecules-store", "data"),
+    prevent_initial_call=True
+)
+def update_table_rows(slider_value, slider_mode, n_clicks, selected_data):
     if slider_mode == "rows":
-        n_rows = int(len(df) * slider_value / 100)
-        return df.head(n_rows).to_dict("records")
+        n_rows = max(1, int(len(df) * slider_value / 100))
+        return apply_selected_markers(df.head(n_rows).to_dict("records"), selected_data)
     elif slider_mode in numeric_cols:
         tdf = df.sort_values(slider_mode, ascending=False)
-        n_rows = int(len(df) * slider_value / 100)
-        return tdf.head(n_rows).to_dict("records")
+        n_rows = max(1, int(len(df) * slider_value / 100))
+        return apply_selected_markers(tdf.head(n_rows).to_dict("records"), selected_data)
     else:
-        return df.to_dict("records")
+        return apply_selected_markers(df.to_dict("records"), selected_data)
 
 
 @app.callback(
     Output("slider-count-label", "children"),
     Input("table-row-slider", "value"),
-    Input("slider-mode-dropdown", "value")
+    Input("slider-mode-dropdown", "value"),
+    Input("upload-status", "children")
 )
-def update_slider_count(slider_value, slider_mode):
+def update_slider_count(slider_value, slider_mode, _upload_status):
     if slider_mode == "rows":
-        n_rows = int(len(df) * slider_value / 100)
+        n_rows = max(1, int(len(df) * slider_value / 100))
     elif slider_mode in numeric_cols:
         tdf = df.sort_values(slider_mode, ascending=False)
-        n_rows = int(len(df) * slider_value / 100)
+        n_rows = max(1, int(len(df) * slider_value / 100))
     else:
         n_rows = len(df)
     return f"{n_rows} molecules"
@@ -1134,14 +1517,15 @@ def update_slider_count(slider_value, slider_mode):
     Output("table-selected-info", "children"),
     Input("table-row-slider", "value"),
     Input("slider-mode-dropdown", "value"),
-    Input("molecules-table", "selected_rows")
+    Input("molecules-table", "selected_rows"),
+    Input("upload-status", "children")
 )
-def update_table_status(slider_value, slider_mode, selected_rows):
+def update_table_status(slider_value, slider_mode, selected_rows, _upload_status):
     if slider_mode == "rows":
-        n_rows = int(len(df) * slider_value / 100)
+        n_rows = max(1, int(len(df) * slider_value / 100))
     elif slider_mode in numeric_cols:
         tdf = df.sort_values(slider_mode, ascending=False)
-        n_rows = int(len(df) * slider_value / 100)
+        n_rows = max(1, int(len(df) * slider_value / 100))
     else:
         n_rows = len(df)
 
