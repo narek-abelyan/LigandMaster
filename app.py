@@ -913,16 +913,16 @@ def sync_table_selection(scatter_click, slider_value, slider_mode):
     return no_update
 
 
-@app.callback(
-    Output("main-panel-group", "style"),
-    Output("copy-row-btn", "style"),
-    Output("selected-page-container", "style"),
-    Input("page-tabs", "value")
-)
-def switch_page(active_tab):
-    if active_tab == "selected-page":
-        return {"display": "none"}, {"display": "none"}, {"display": "block", "height": "85vh", "padding": "8px"}
-    return {"display": "block"}, {"display": "inline-block"}, {"display": "none", "height": "85vh", "padding": "8px"}
+# @app.callback(
+#     Output("main-panel-group", "style"),
+#     Output("copy-row-btn", "style"),
+#     Output("selected-page-container", "style"),
+#     Input("page-tabs", "value")
+# )
+# def switch_page(active_tab):
+#     if active_tab == "selected-page":
+#         return {"display": "none"}, {"display": "none"}, {"display": "block", "height": "85vh", "padding": "8px"}
+#     return {"display": "block"}, {"display": "inline-block"}, {"display": "none", "height": "85vh", "padding": "8px"}
 
 
 @app.callback(
