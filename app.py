@@ -1023,6 +1023,10 @@ def show_user_info(_):
     Output("hist-col-dropdown", "options", allow_duplicate=True),
     Output("scatter-color-dropdown", "options", allow_duplicate=True),
     Output("slider-mode-dropdown", "options", allow_duplicate=True),
+    Output("scatter-x-dropdown", "value"),
+    Output("scatter-y-dropdown", "value"),
+    Output("tpsa-hist-col-dropdown", "value"),
+    Output("hist-col-dropdown", "value"),
     Input("upload-data", "contents"),
     State("upload-data", "filename"),
     State("table-row-slider", "value"),
@@ -1057,6 +1061,9 @@ def upload_csv(contents, filename, slider_value, slider_mode):
         else:
             table_data = with_add_marker(new_df.to_dict("records"))
 
+        default_x = new_numeric_cols[0] if len(new_numeric_cols) > 0 else None
+        default_y = new_numeric_cols[1] if len(new_numeric_cols) > 1 else default_x
+
         return (
             f"✅ Uploaded file: {filename}",
             table_data,
@@ -1069,9 +1076,13 @@ def upload_csv(contents, filename, slider_value, slider_mode):
             new_dropdown_options,
             scatter_color_options,
             slider_options,
+            default_x,
+            default_y,
+            default_y,
+            default_x,
         )
     except Exception as e:
-        return f"❌ CSV upload error: {e}", no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update
+        return (f"❌ CSV upload error: {e}",) + (no_update,) * 14
 
 
 # ---------- 1. Toggle Select / Unselect All ----------
@@ -1502,12 +1513,28 @@ def update_selected_image(selected_rows, selected_data):
     State("molecules-table", "derived_virtual_data"),
     State("molecules-table", "derived_viewport_data"),
 )
+def _blank_figure(message):
+    fig = go.Figure()
+    fig.add_annotation(text=message, showarrow=False, font=dict(size=14, color="#888"))
+    fig.update_layout(margin=dict(l=20, r=20, t=20, b=20))
+    return fig
+
+
 def update_all(selected_rows, viewport_selected_rows, hist_col, scatter_x, scatter_y, tpsa_hist_col,
                hist_color, tpsa_hist_color, scatter_color_col, slider_value, slider_mode,
                hist_nbins, hist_nbins2, compute_kde_clicks, filter_query, table_data, virtual_data, viewport_data):
+    state = get_state()
+    sdf = state["df"]
+    numeric_cols_state = state["numeric_cols"]
+
+    def pick_col(preferred, fallback_index=0):
+        if preferred in numeric_cols_state:
+            return preferred
+        if len(numeric_cols_state) > fallback_index:
+            return numeric_cols_state[fallback_index]
+        return numeric_cols_state[0] if numeric_cols_state else None
+
     try:
-        state = get_state()
-        sdf = state["df"]
         if filter_query and virtual_data is not None:
             tdf = pd.DataFrame(virtual_data).copy()
             if "__add__" in tdf.columns:
@@ -1523,14 +1550,17 @@ def update_all(selected_rows, viewport_selected_rows, hist_col, scatter_x, scatt
         elif slider_mode == "rows":
             n_rows = max(1, int(len(sdf) * slider_value / 100))
             tdf = sdf.head(n_rows).copy()
-        elif slider_mode in state["numeric_cols"]:
+        elif slider_mode in numeric_cols_state:
             tdf = sdf.sort_values(slider_mode, ascending=False)
             n_rows = max(1, int(len(sdf) * slider_value / 100))
             tdf = tdf.head(n_rows)
         else:
             tdf = sdf.copy()
+    except Exception:
+        tdf = sdf.copy()
 
-        compute_kde = bool(compute_kde_clicks and compute_kde_clicks > 0)
+    compute_kde = bool(compute_kde_clicks and compute_kde_clicks > 0)
+    try:
         if viewport_data is not None:
             vdf = pd.DataFrame(viewport_data).copy()
             if "__add__" in vdf.columns:
@@ -1539,8 +1569,13 @@ def update_all(selected_rows, viewport_selected_rows, hist_col, scatter_x, scatt
                 vdf = tdf.copy()
         else:
             vdf = tdf.copy()
+    except Exception:
+        vdf = tdf.copy()
 
-        selected_idx_list = viewport_selected_rows if viewport_selected_rows else (selected_rows or [])
+    selected_idx_list = viewport_selected_rows if viewport_selected_rows else (selected_rows or [])
+
+    # ---------- 2D-изображение молекулы (не зависит от числовых колонок) ----------
+    try:
         img_components = []
         if selected_idx_list:
             for sel_idx in selected_idx_list:
@@ -1552,64 +1587,84 @@ def update_all(selected_rows, viewport_selected_rows, hist_col, scatter_x, scatt
                         html.Img(src=img_b64, style={"maxWidth": "100%", "maxHeight": "100%", "objectFit": "contain", "margin": "4px"})
                     )
         if not img_components:
-            row = vdf.iloc[0] if len(vdf) > 0 else sdf.iloc[0]
-            img_b64 = smiles_to_base64(row.get("SMILES", ""))
-            img_components.append(
-                html.Img(src=img_b64, style={"maxWidth": "100%", "maxHeight": "100%", "objectFit": "contain"})
+            source_df = vdf if len(vdf) > 0 else sdf
+            if len(source_df) > 0:
+                row = source_df.iloc[0]
+                img_b64 = smiles_to_base64(row.get("SMILES", ""))
+                img_components.append(
+                    html.Img(src=img_b64, style={"maxWidth": "100%", "maxHeight": "100%", "objectFit": "contain"})
+                )
+        if img_components:
+            img_component = html.Div(
+                img_components,
+                style={"display": "flex", "flexWrap": "wrap", "justifyContent": "center", "overflowY": "auto", "height": "100%"}
             )
-
-        img_component = html.Div(
-            img_components,
-            style={"display": "flex", "flexWrap": "wrap", "justifyContent": "center", "overflowY": "auto", "height": "100%"}
-        )
-
-
-        safe_x = scatter_x or "MolWt"
-        safe_y = scatter_y or "TPSA"
-        s_tdf = tdf.sample(SCATTER_SAMPLE, random_state=1) if len(tdf) > SCATTER_SAMPLE else tdf
-        color_arg = scatter_color_col if scatter_color_col in s_tdf.columns else None
-
-        fig_sc = px.scatter(
-            s_tdf, x=safe_x, y=safe_y, color=color_arg,
-            size_max=12, hover_data=["ID", safe_x, safe_y],
-            custom_data=["ID"],
-            title=f"{safe_x} vs {safe_y}"
-        )
-        point_size = max(3, min(10, 5000 / len(s_tdf)))
-        fig_sc.update_traces(marker=dict(size=point_size, line=dict(width=0.5, color="DarkSlateGrey"), opacity=0.6))
-
-        for sel_idx in (selected_idx_list or []):
-            if sel_idx < len(vdf):
-                sel_point = vdf.iloc[sel_idx]
-                sel_id = str(sel_point["ID"])
-                if sel_id in s_tdf["ID"].astype(str).values:
-                    fig_sc.add_trace(go.Scatter(
-                        x=[sel_point[safe_x]],
-                        y=[sel_point[safe_y]],
-                        mode="markers",
-                        marker=dict(size=16, symbol="asterisk", color="black", line=dict(width=2, color="black")),
-                        customdata=[[sel_id]],
-                        hovertemplate=f"<b>Selected ID: {sel_id}</b><br>{safe_x}: %{{x}}<br>{safe_y}: %{{y}}<extra></extra>",
-                        showlegend=False
-                    ))
-
-        fig_sc.update_layout(
-            margin=dict(l=45, r=10, t=30, b=60),
-            plot_bgcolor='rgba(250,250,250,1)',
-            paper_bgcolor='rgba(250,250,250,1)'
-        )
-
-        fig_hist = make_pretty_hist(tdf, hist_col or "MolWt", hist_color or "#1f77b4",
-                                    f"Distribution of {hist_col or 'MolWt'}", nbinsx=hist_nbins2 or 40, compute_kde=compute_kde)
-        fig_tpsa_hist = make_pretty_hist(tdf, tpsa_hist_col or "TPSA", tpsa_hist_color or "#2ca02c",
-                                         f"Distribution of {tpsa_hist_col or 'TPSA'}", nbinsx=hist_nbins or 40, compute_kde=compute_kde)
-
-        return img_component, fig_hist, fig_tpsa_hist, fig_sc
-
+        else:
+            img_component = html.Div("Нет молекул для отображения.")
     except Exception:
-        blank = go.Figure()
-        blank.add_annotation(text="Ошибка в графиках (см. терминал)", showarrow=False, font=dict(size=18, color="red"))
-        return html.Div("Ошибка"), blank, blank, blank
+        img_component = html.Div("Не удалось отрисовать структуру молекулы.")
+
+    # ---------- Scatter (нужны минимум 2 числовые колонки, иначе placeholder) ----------
+    if len(numeric_cols_state) == 0:
+        fig_sc = _blank_figure("Нет числовых колонок для графика.\nЗагрузите CSV с числовыми данными или посчитайте свойства.")
+    else:
+        try:
+            safe_x = pick_col(scatter_x, 0)
+            safe_y = pick_col(scatter_y, 1)
+            s_tdf = tdf.sample(SCATTER_SAMPLE, random_state=1) if len(tdf) > SCATTER_SAMPLE else tdf
+            color_arg = scatter_color_col if scatter_color_col in s_tdf.columns else None
+
+            fig_sc = px.scatter(
+                s_tdf, x=safe_x, y=safe_y, color=color_arg,
+                size_max=12, hover_data=["ID", safe_x, safe_y],
+                custom_data=["ID"],
+                title=f"{safe_x} vs {safe_y}"
+            )
+            point_size = max(3, min(10, 5000 / len(s_tdf))) if len(s_tdf) else 5
+            fig_sc.update_traces(marker=dict(size=point_size, line=dict(width=0.5, color="DarkSlateGrey"), opacity=0.6))
+
+            for sel_idx in (selected_idx_list or []):
+                if sel_idx < len(vdf):
+                    sel_point = vdf.iloc[sel_idx]
+                    sel_id = str(sel_point["ID"])
+                    if sel_id in s_tdf["ID"].astype(str).values:
+                        fig_sc.add_trace(go.Scatter(
+                            x=[sel_point[safe_x]],
+                            y=[sel_point[safe_y]],
+                            mode="markers",
+                            marker=dict(size=16, symbol="asterisk", color="black", line=dict(width=2, color="black")),
+                            customdata=[[sel_id]],
+                            hovertemplate=f"<b>Selected ID: {sel_id}</b><br>{safe_x}: %{{x}}<br>{safe_y}: %{{y}}<extra></extra>",
+                            showlegend=False
+                        ))
+
+            fig_sc.update_layout(
+                margin=dict(l=45, r=10, t=30, b=60),
+                plot_bgcolor='rgba(250,250,250,1)',
+                paper_bgcolor='rgba(250,250,250,1)'
+            )
+        except Exception:
+            fig_sc = _blank_figure("Не удалось построить график.")
+
+    # ---------- Гистограммы ----------
+    if len(numeric_cols_state) == 0:
+        fig_hist = _blank_figure("Нет числовых колонок.")
+        fig_tpsa_hist = _blank_figure("Нет числовых колонок.")
+    else:
+        try:
+            safe_hist_col = pick_col(hist_col, 0)
+            fig_hist = make_pretty_hist(tdf, safe_hist_col, hist_color or "#1f77b4",
+                                        f"Distribution of {safe_hist_col}", nbinsx=hist_nbins2 or 40, compute_kde=compute_kde)
+        except Exception:
+            fig_hist = _blank_figure("Не удалось построить гистограмму.")
+        try:
+            safe_tpsa_col = pick_col(tpsa_hist_col, 0)
+            fig_tpsa_hist = make_pretty_hist(tdf, safe_tpsa_col, tpsa_hist_color or "#2ca02c",
+                                             f"Distribution of {safe_tpsa_col}", nbinsx=hist_nbins or 40, compute_kde=compute_kde)
+        except Exception:
+            fig_tpsa_hist = _blank_figure("Не удалось построить гистограмму.")
+
+    return img_component, fig_hist, fig_tpsa_hist, fig_sc
 
 
 # ---------- 4. Обновление колонок таблицы ----------
