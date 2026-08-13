@@ -1526,10 +1526,10 @@ def _build_tdf(sdf, filter_query, virtual_data, table_data):
     Output("img-container", "children"),
     Input("molecules-table", "selected_rows"),
     Input("molecules-table", "derived_viewport_selected_rows"),
-    Input("molecules-table", "data"),
+    Input("upload-status", "children"),
     State("molecules-table", "derived_viewport_data"),
 )
-def update_image(selected_rows, viewport_selected_rows, table_data, viewport_data):
+def update_image(selected_rows, viewport_selected_rows, _upload_status, viewport_data):
     state = get_state()
     sdf = state["df"]
     selected_idx_list = viewport_selected_rows if viewport_selected_rows else (selected_rows or [])
