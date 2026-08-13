@@ -732,6 +732,7 @@ app.layout = html.Div(
                                                                 )
                                                             ]
                                                         ),
+                                                        dbc.Button("Clear sorting", id="clear-sort-btn", color="secondary", size="sm"),
                                                         html.Div(
                                                             style=SLIDER_CONTAINER_STYLE,
                                                             children=[
@@ -837,7 +838,8 @@ app.layout = html.Div(
                                                     },
                                                     children=[
                                                         html.Div(id="table-rows-info"),
-                                                        html.Div(id="table-selected-info")
+                                                        html.Div(id="table-selected-info"),
+                                                        html.Div(id="table-sort-info")
                                                     ]
                                                 )
                                             ]
@@ -1733,6 +1735,32 @@ def update_table_columns(selected_columns):
         return []
     state = get_state()
     return [col for col in state["table_columns"] if col['id'] in selected_columns]
+
+
+# ---------- Сортировка таблицы: сброс и индикатор текущего состояния ----------
+@app.callback(
+    Output("molecules-table", "sort_by"),
+    Input("clear-sort-btn", "n_clicks"),
+    prevent_initial_call=True,
+)
+def clear_table_sort(n_clicks):
+    if not n_clicks:
+        return no_update
+    return []
+
+
+@app.callback(
+    Output("table-sort-info", "children"),
+    Input("molecules-table", "sort_by"),
+)
+def show_table_sort_state(sort_by):
+    if not sort_by:
+        return "No sorting applied"
+    parts = []
+    for s in sort_by:
+        arrow = "↑" if s.get("direction") == "asc" else "↓"
+        parts.append(f"{s.get('column_id')} {arrow}")
+    return "Sorted by: " + ", ".join(parts)
 
 
 # ---------- 5. Лейбл ползунка ----------
