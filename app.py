@@ -1,5 +1,8 @@
 import base64
 import io
+import os
+import uuid
+from flask import request, session, redirect, Response
 import pandas as pd
 import numpy as np
 from scipy.stats import gaussian_kde
@@ -202,6 +205,26 @@ def apply_selected_markers(records, selected_data):
 
 numeric_cols, dropdown_options, table_columns = build_table_columns(df)
 
+# ========== Изолированное состояние на каждую сессию (пользователя) ==========
+SESSION_STATE = {}
+
+
+def get_state():
+    """Каждый залогиненный пользователь работает со своей копией данных,
+    чтобы загрузка/расчёты одного пользователя не влияли на других."""
+    sid = session.get("sid")
+    if not sid:
+        sid = str(uuid.uuid4())
+        session["sid"] = sid
+    if sid not in SESSION_STATE:
+        SESSION_STATE[sid] = {
+            "df": df.copy(),
+            "numeric_cols": list(numeric_cols),
+            "dropdown_options": list(dropdown_options),
+            "table_columns": [dict(c) for c in table_columns],
+        }
+    return SESSION_STATE[sid]
+
 
 # ========== Вспомогательные функции ==========
 def pil_to_b64(pil_img, fmt="PNG"):
@@ -234,6 +257,133 @@ def smiles_to_thumb_html(smiles, size=(120, 80)):
 # ========== Инициализация Dash ==========
 app = Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 server = app.server
+
+# ========== Авторизация ==========
+server.secret_key = os.environ.get("SECRET_KEY", os.urandom(24).hex())
+
+def _load_users():
+    users = {}
+    raw = os.environ.get("APP_USERS", "admin:changeme")
+    for pair in raw.split(","):
+        pair = pair.strip()
+        if ":" in pair:
+            u, p = pair.split(":", 1)
+            users[u.strip()] = p.strip()
+    return users
+
+
+AUTH_USERS = _load_users()
+if os.environ.get("APP_USERS") is None:
+    print("⚠️  APP_USERS не задан — используется логин по умолчанию admin:changeme. "
+          "Задайте переменную окружения APP_USERS='user1:pass1,user2:pass2' в продакшене.")
+
+LOGIN_PAGE_TEMPLATE = """
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Login — Molecular Dashboard</title>
+    <style>
+        body {{
+            font-family: "Segoe UI", Roboto, sans-serif;
+            background-color: #f8f9fb;
+            height: 100vh;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }}
+        .login-card {{
+            background: #ffffff;
+            padding: 32px 28px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            width: 320px;
+        }}
+        .login-card h2 {{
+            margin: 0 0 18px 0;
+            font-size: 20px;
+            text-align: center;
+        }}
+        .login-card input {{
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 12px;
+            border: 1px solid #d0d0d0;
+            border-radius: 6px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }}
+        .login-card button {{
+            width: 100%;
+            padding: 10px;
+            border: none;
+            border-radius: 6px;
+            background-color: #007bff;
+            color: white;
+            font-size: 14px;
+            cursor: pointer;
+        }}
+        .login-card button:hover {{
+            background-color: #0069d9;
+        }}
+        .error {{
+            color: #d62728;
+            font-size: 13px;
+            margin-bottom: 10px;
+            text-align: center;
+        }}
+    </style>
+</head>
+<body>
+    <div class="login-card">
+        <h2>Molecular Dashboard</h2>
+        {error}
+        <form method="post">
+            <input type="text" name="username" placeholder="Username" autofocus required>
+            <input type="password" name="password" placeholder="Password" required>
+            <button type="submit">Log in</button>
+        </form>
+    </div>
+</body>
+</html>
+"""
+
+PUBLIC_PATHS = {"/login", "/logout"}
+
+
+@server.before_request
+def _require_login():
+    if request.path in PUBLIC_PATHS:
+        return None
+    if not session.get("logged_in"):
+        if request.path.startswith("/_dash") or request.path.startswith("/assets"):
+            return Response("Unauthorized", status=401)
+        return redirect("/login")
+    return None
+
+
+@server.route("/login", methods=["GET", "POST"])
+def login():
+    error = ""
+    if request.method == "POST":
+        username = request.form.get("username", "")
+        password = request.form.get("password", "")
+        if AUTH_USERS.get(username) == password:
+            session.clear()
+            session["logged_in"] = True
+            session["username"] = username
+            session["sid"] = str(uuid.uuid4())
+            return redirect("/")
+        error = "<div class='error'>Invalid username or password</div>"
+    return LOGIN_PAGE_TEMPLATE.format(error=error)
+
+
+@server.route("/logout")
+def logout():
+    session.clear()
+    return redirect("/login")
 
 # ========== Стили ==========
 DROPDOWN_STYLE = {
@@ -374,24 +524,33 @@ app.layout = html.Div(
     style={"height": "100vh", "margin": "0", "padding": "0"},
     children=[
         dcc.Store(id="selected-molecules-store", data=[]),
-        dcc.Tabs(
-            id="page-tabs",
-            value="main-page",
+        html.Div(
+            style={"display": "flex", "alignItems": "center", "backgroundColor": "#ffffff", "height": "44px"},
             children=[
-                dcc.Tab(
-                    label="Main Page",
+                dcc.Tabs(
+                    id="page-tabs",
                     value="main-page",
-                    style={"height": "42px", "display": "flex", "alignItems": "center", "justifyContent": "center"},
-                    selected_style={"height": "42px", "display": "flex", "alignItems": "center", "justifyContent": "center", "fontWeight": "600"}
+                    children=[
+                        dcc.Tab(
+                            label="Main Page",
+                            value="main-page",
+                            style={"height": "42px", "display": "flex", "alignItems": "center", "justifyContent": "center"},
+                            selected_style={"height": "42px", "display": "flex", "alignItems": "center", "justifyContent": "center", "fontWeight": "600"}
+                        ),
+                        dcc.Tab(
+                            label="Selected Molecules",
+                            value="selected-page",
+                            style={"height": "42px", "display": "flex", "alignItems": "center", "justifyContent": "center"},
+                            selected_style={"height": "42px", "display": "flex", "alignItems": "center", "justifyContent": "center", "fontWeight": "600"}
+                        ),
+                    ],
+                    style={"padding": "0 4px", "backgroundColor": "#ffffff", "height": "44px", "flex": 1}
                 ),
-                dcc.Tab(
-                    label="Selected Molecules",
-                    value="selected-page",
-                    style={"height": "42px", "display": "flex", "alignItems": "center", "justifyContent": "center"},
-                    selected_style={"height": "42px", "display": "flex", "alignItems": "center", "justifyContent": "center", "fontWeight": "600"}
-                ),
-            ],
-            style={"padding": "0 4px", "backgroundColor": "#ffffff", "height": "44px"}
+                html.Div(
+                    id="user-info-bar",
+                    style={"display": "flex", "alignItems": "center", "gap": "12px", "paddingRight": "16px", "fontSize": "13px", "color": "#555", "whiteSpace": "nowrap"}
+                )
+            ]
         ),
         html.Div(
             id="main-page-container",
@@ -867,6 +1026,18 @@ app.layout = html.Div(
 # ========== Колбэки ==========
 
 @app.callback(
+    Output("user-info-bar", "children"),
+    Input("page-tabs", "value")
+)
+def show_user_info(_):
+    username = session.get("username", "")
+    return [
+        html.Span(f"👤 {username}"),
+        html.A("Logout", href="/logout", style={"color": "#007bff", "textDecoration": "none"})
+    ]
+
+
+@app.callback(
     Output("upload-status", "children"),
     Output("molecules-table", "data", allow_duplicate=True),
     Output("molecules-table", "columns", allow_duplicate=True),
@@ -885,38 +1056,43 @@ app.layout = html.Div(
     prevent_initial_call=True
 )
 def upload_csv(contents, filename, slider_value, slider_mode):
-    global df, numeric_cols, dropdown_options, table_columns
     if not contents:
         return no_update
 
     try:
-        df = parse_uploaded_csv(contents)
-        numeric_cols, dropdown_options, table_columns = build_table_columns(df)
-        column_options = [{'label': col['name'], 'value': col['id']} for col in table_columns]
-        selected_columns = [col['id'] for col in table_columns]
-        scatter_color_options = [{'label': 'None', 'value': ''}] + dropdown_options
-        slider_options = [{"label": "By row count", "value": "rows"}] + dropdown_options
+        state = get_state()
+        new_df = parse_uploaded_csv(contents)
+        new_numeric_cols, new_dropdown_options, new_table_columns = build_table_columns(new_df)
+        state["df"] = new_df
+        state["numeric_cols"] = new_numeric_cols
+        state["dropdown_options"] = new_dropdown_options
+        state["table_columns"] = new_table_columns
+
+        column_options = [{'label': col['name'], 'value': col['id']} for col in new_table_columns]
+        selected_columns = [col['id'] for col in new_table_columns]
+        scatter_color_options = [{'label': 'None', 'value': ''}] + new_dropdown_options
+        slider_options = [{"label": "By row count", "value": "rows"}] + new_dropdown_options
 
         if slider_mode == "rows":
-            n_rows = max(1, int(len(df) * (slider_value or 100) / 100))
-            table_data = with_add_marker(df.head(n_rows).to_dict("records"))
-        elif slider_mode in numeric_cols:
-            tdf = df.sort_values(slider_mode, ascending=False)
-            n_rows = max(1, int(len(df) * (slider_value or 100) / 100))
+            n_rows = max(1, int(len(new_df) * (slider_value or 100) / 100))
+            table_data = with_add_marker(new_df.head(n_rows).to_dict("records"))
+        elif slider_mode in new_numeric_cols:
+            tdf = new_df.sort_values(slider_mode, ascending=False)
+            n_rows = max(1, int(len(new_df) * (slider_value or 100) / 100))
             table_data = with_add_marker(tdf.head(n_rows).to_dict("records"))
         else:
-            table_data = with_add_marker(df.to_dict("records"))
+            table_data = with_add_marker(new_df.to_dict("records"))
 
         return (
             f"✅ Uploaded file: {filename}",
             table_data,
-            [col for col in table_columns],
+            [col for col in new_table_columns],
             column_options,
             selected_columns,
-            dropdown_options,
-            dropdown_options,
-            dropdown_options,
-            dropdown_options,
+            new_dropdown_options,
+            new_dropdown_options,
+            new_dropdown_options,
+            new_dropdown_options,
             scatter_color_options,
             slider_options,
         )
@@ -975,11 +1151,13 @@ def calculate_extra_properties(n_clicks, lipo_vals, hbond_vals, size_vals, rings
 
     print(f"🔬 Рассчитываем {len(selected_props)} свойств: {selected_props}")
 
+    state = get_state()
+    sdf = state["df"]
     for prop_name in selected_props:
-        if prop_name not in df.columns:
+        if prop_name not in sdf.columns:
             func = extra_properties[prop_name]
             values = []
-            for smiles in df["SMILES"]:
+            for smiles in sdf["SMILES"]:
                 mol = Chem.MolFromSmiles(str(smiles))
                 if mol is None:
                     values.append(np.nan)
@@ -988,16 +1166,16 @@ def calculate_extra_properties(n_clicks, lipo_vals, hbond_vals, size_vals, rings
                         values.append(func(mol))
                     except Exception:
                         values.append(np.nan)
-            df[prop_name] = values
+            sdf[prop_name] = values
             print(f" ✓ Добавлена колонка: {prop_name}")
 
-    global table_columns, numeric_cols, dropdown_options
-    numeric_cols, dropdown_options, table_columns = build_table_columns(df)
+    state["numeric_cols"], state["dropdown_options"], state["table_columns"] = build_table_columns(sdf)
+    table_columns = state["table_columns"]
 
     new_column_options = [{'label': col['name'], 'value': col['id']} for col in table_columns]
     all_column_ids = [col['id'] for col in table_columns]
 
-    numeric_dropdown = dropdown_options
+    numeric_dropdown = state["dropdown_options"]
     color_dropdown = [{'label': 'None', 'value': ''}] + numeric_dropdown
     slider_dropdown = [{"label": "By row count", "value": "rows"}] + numeric_dropdown
 
@@ -1028,15 +1206,17 @@ def calculate_extra_properties(n_clicks, lipo_vals, hbond_vals, size_vals, rings
     State("molecules-table", "data")
 )
 def sync_table_selection(scatter_click, slider_value, slider_mode, table_data):
+    state = get_state()
+    sdf = state["df"]
     if slider_mode == "rows":
-        n_rows = max(1, int(len(df) * slider_value / 100))
-        tdf = df.head(n_rows)
-    elif slider_mode in numeric_cols:
-        tdf = df.sort_values(slider_mode, ascending=False)
-        n_rows = max(1, int(len(df) * slider_value / 100))
+        n_rows = max(1, int(len(sdf) * slider_value / 100))
+        tdf = sdf.head(n_rows)
+    elif slider_mode in state["numeric_cols"]:
+        tdf = sdf.sort_values(slider_mode, ascending=False)
+        n_rows = max(1, int(len(sdf) * slider_value / 100))
         tdf = tdf.head(n_rows)
     else:
-        tdf = df.copy()
+        tdf = sdf.copy()
 
     if scatter_click and 'points' in scatter_click:
         clicked_id = str(scatter_click['points'][0]['customdata'][0])
@@ -1352,27 +1532,29 @@ def update_all(selected_rows, viewport_selected_rows, hist_col, scatter_x, scatt
                hist_color, tpsa_hist_color, scatter_color_col, slider_value, slider_mode,
                hist_nbins, hist_nbins2, compute_kde_clicks, filter_query, table_data, virtual_data, viewport_data):
     try:
+        state = get_state()
+        sdf = state["df"]
         if filter_query and virtual_data is not None:
             tdf = pd.DataFrame(virtual_data).copy()
             if "__add__" in tdf.columns:
                 tdf = tdf.drop(columns=["__add__"])
             if tdf.empty:
-                tdf = df.head(1).copy()
+                tdf = sdf.head(1).copy()
         elif table_data is not None:
             tdf = pd.DataFrame(table_data).copy()
             if "__add__" in tdf.columns:
                 tdf = tdf.drop(columns=["__add__"])
             if tdf.empty:
-                tdf = df.head(1).copy()
+                tdf = sdf.head(1).copy()
         elif slider_mode == "rows":
-            n_rows = max(1, int(len(df) * slider_value / 100))
-            tdf = df.head(n_rows).copy()
-        elif slider_mode in numeric_cols:
-            tdf = df.sort_values(slider_mode, ascending=False)
-            n_rows = max(1, int(len(df) * slider_value / 100))
+            n_rows = max(1, int(len(sdf) * slider_value / 100))
+            tdf = sdf.head(n_rows).copy()
+        elif slider_mode in state["numeric_cols"]:
+            tdf = sdf.sort_values(slider_mode, ascending=False)
+            n_rows = max(1, int(len(sdf) * slider_value / 100))
             tdf = tdf.head(n_rows)
         else:
-            tdf = df.copy()
+            tdf = sdf.copy()
 
         compute_kde = bool(compute_kde_clicks and compute_kde_clicks > 0)
         if viewport_data is not None:
@@ -1396,7 +1578,7 @@ def update_all(selected_rows, viewport_selected_rows, hist_col, scatter_x, scatt
                         html.Img(src=img_b64, style={"maxWidth": "100%", "maxHeight": "100%", "objectFit": "contain", "margin": "4px"})
                     )
         if not img_components:
-            row = vdf.iloc[0] if len(vdf) > 0 else df.iloc[0]
+            row = vdf.iloc[0] if len(vdf) > 0 else sdf.iloc[0]
             img_b64 = smiles_to_base64(row.get("SMILES", ""))
             img_components.append(
                 html.Img(src=img_b64, style={"maxWidth": "100%", "maxHeight": "100%", "objectFit": "contain"})
@@ -1465,7 +1647,8 @@ def update_all(selected_rows, viewport_selected_rows, hist_col, scatter_x, scatt
 def update_table_columns(selected_columns):
     if not selected_columns:
         return []
-    return [col for col in table_columns if col['id'] in selected_columns]
+    state = get_state()
+    return [col for col in state["table_columns"] if col['id'] in selected_columns]
 
 
 # ---------- 5. Лейбл ползунка ----------
@@ -1484,15 +1667,17 @@ def update_slider_label(val):
     prevent_initial_call=True
 )
 def update_table_rows(slider_value, slider_mode, n_clicks, selected_data):
+    state = get_state()
+    sdf = state["df"]
     if slider_mode == "rows":
-        n_rows = max(1, int(len(df) * slider_value / 100))
-        return apply_selected_markers(df.head(n_rows).to_dict("records"), selected_data)
-    elif slider_mode in numeric_cols:
-        tdf = df.sort_values(slider_mode, ascending=False)
-        n_rows = max(1, int(len(df) * slider_value / 100))
+        n_rows = max(1, int(len(sdf) * slider_value / 100))
+        return apply_selected_markers(sdf.head(n_rows).to_dict("records"), selected_data)
+    elif slider_mode in state["numeric_cols"]:
+        tdf = sdf.sort_values(slider_mode, ascending=False)
+        n_rows = max(1, int(len(sdf) * slider_value / 100))
         return apply_selected_markers(tdf.head(n_rows).to_dict("records"), selected_data)
     else:
-        return apply_selected_markers(df.to_dict("records"), selected_data)
+        return apply_selected_markers(sdf.to_dict("records"), selected_data)
 
 
 @app.callback(
@@ -1502,13 +1687,14 @@ def update_table_rows(slider_value, slider_mode, n_clicks, selected_data):
     Input("upload-status", "children")
 )
 def update_slider_count(slider_value, slider_mode, _upload_status):
+    state = get_state()
+    sdf = state["df"]
     if slider_mode == "rows":
-        n_rows = max(1, int(len(df) * slider_value / 100))
-    elif slider_mode in numeric_cols:
-        tdf = df.sort_values(slider_mode, ascending=False)
-        n_rows = max(1, int(len(df) * slider_value / 100))
+        n_rows = max(1, int(len(sdf) * slider_value / 100))
+    elif slider_mode in state["numeric_cols"]:
+        n_rows = max(1, int(len(sdf) * slider_value / 100))
     else:
-        n_rows = len(df)
+        n_rows = len(sdf)
     return f"{n_rows} molecules"
 
 
@@ -1521,17 +1707,18 @@ def update_slider_count(slider_value, slider_mode, _upload_status):
     Input("upload-status", "children")
 )
 def update_table_status(slider_value, slider_mode, selected_rows, _upload_status):
+    state = get_state()
+    sdf = state["df"]
     if slider_mode == "rows":
-        n_rows = max(1, int(len(df) * slider_value / 100))
-    elif slider_mode in numeric_cols:
-        tdf = df.sort_values(slider_mode, ascending=False)
-        n_rows = max(1, int(len(df) * slider_value / 100))
+        n_rows = max(1, int(len(sdf) * slider_value / 100))
+    elif slider_mode in state["numeric_cols"]:
+        n_rows = max(1, int(len(sdf) * slider_value / 100))
     else:
-        n_rows = len(df)
+        n_rows = len(sdf)
 
     sel_text = f"Selected row: {selected_rows[0]+1}" if selected_rows else "No selection"
 
-    return f"Showing {n_rows} of {len(df)} molecules", sel_text
+    return f"Showing {n_rows} of {len(sdf)} molecules", sel_text
 
 
 # ========== Запуск ==========
