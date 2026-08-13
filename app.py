@@ -34,32 +34,6 @@ def prepare_df(new_df: pd.DataFrame) -> pd.DataFrame:
             new_df['ID'] = new_df['ID'].astype(str).str.strip()
 
     required = {"ID", "SMILES"}
-    missing_basic = required - set(new_df.columns)
-    if missing_basic:
-        raise ValueError(f"В CSV отсутствуют необходимые столбцы: {missing_basic}")
-
-    if "MolWt" not in new_df.columns or "TPSA" not in new_df.columns:
-        print(f"⚠️ Вычисляем отсутствующие колонки: MolWt и/или TPSA из SMILES...")
-        mols = [Chem.MolFromSmiles(str(s)) for s in new_df["SMILES"]]
-        mw_list = []
-        tpsa_list = []
-
-        for mol in mols:
-            if mol is None:
-                mw_list.append(np.nan)
-                tpsa_list.append(np.nan)
-            else:
-                mw_list.append(Descriptors.MolWt(mol))
-                tpsa_list.append(Descriptors.TPSA(mol))
-
-        if "MolWt" not in new_df.columns:
-            new_df["MolWt"] = mw_list
-        if "TPSA" not in new_df.columns:
-            new_df["TPSA"] = tpsa_list
-
-        print("✅ MolWt и TPSA успешно добавлены.")
-
-    required = {"ID", "SMILES", "MolWt", "TPSA"}
     missing = required - set(new_df.columns)
     if missing:
         raise ValueError(f"В CSV отсутствуют необходимые столбцы: {missing}")
