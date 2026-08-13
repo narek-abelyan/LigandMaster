@@ -379,7 +379,19 @@ SLIDER_CONTAINER_STYLE = {
     "display": "flex",
     "alignItems": "center",
     "gap": "10px",
-    "flex": 1
+    "width": "330px",
+    "padding": "4px 12px",
+    "backgroundColor": "#f5f3ff",
+    "border": "1px solid #e4defb",
+    "borderRadius": "10px",
+}
+SLIDER_DROPDOWN_STYLE = {
+    "width": "140px",
+    "height": "32px",
+    "fontSize": "12px",
+    "borderRadius": "8px",
+    "border": "1px solid #d8d0f5",
+    "backgroundColor": "#ffffff",
 }
 
 # ========== HTML-шаблон ==========
@@ -404,17 +416,68 @@ app.index_string = '''
             }
             .dash-slider {
                 width: 100%;
-                height: 4px;
-                background: transparent;
-                border-radius: 2px;
+                height: 6px;
+            }
+            .dash-slider .rc-slider-rail {
+                background: #e3ddf7;
+                height: 6px;
+                border-radius: 3px;
+            }
+            .dash-slider .rc-slider-track {
+                background: linear-gradient(90deg, #7b5cf0 0%, #a06be0 50%, #f06bc0 100%);
+                height: 6px;
+                border-radius: 3px;
             }
             .dash-slider .rc-slider-handle {
-                border: none !important;
-                background: #007bff !important;
-                box-shadow: 0 0 6px rgba(0,123,255,0.3);
-                width: 16px;
-                height: 16px;
+                border: 3px solid #ffffff !important;
+                background: linear-gradient(135deg, #7b5cf0, #f06bc0) !important;
+                box-shadow: 0 2px 8px rgba(123,92,240,0.45);
+                width: 18px;
+                height: 18px;
                 margin-top: -6px;
+                opacity: 1;
+                transition: transform 0.15s ease, box-shadow 0.15s ease;
+            }
+            .dash-slider .rc-slider-handle:hover,
+            .dash-slider .rc-slider-handle:active,
+            .dash-slider .rc-slider-handle-dragging {
+                transform: scale(1.3);
+                box-shadow: 0 4px 14px rgba(123,92,240,0.6);
+            }
+            .slider-badge {
+                min-width: 46px;
+                text-align: center;
+                font-weight: 700;
+                font-size: 12px;
+                color: #ffffff;
+                background: linear-gradient(135deg, #7b5cf0, #f06bc0);
+                padding: 3px 8px;
+                border-radius: 12px;
+            }
+            .btn {
+                border-radius: 8px !important;
+                font-weight: 600 !important;
+                border: none !important;
+                letter-spacing: 0.2px;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.14);
+                transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+            }
+            .btn:hover {
+                transform: translateY(-1px);
+                box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+                filter: brightness(1.06);
+            }
+            .btn:active {
+                transform: translateY(0);
+                filter: brightness(0.97);
+            }
+            .btn-gradient-primary {
+                background: linear-gradient(135deg, #4f8cfc 0%, #6f5cf0 100%) !important;
+                color: #ffffff !important;
+            }
+            .btn-gradient-success {
+                background: linear-gradient(135deg, #22c58b 0%, #3ad1c4 100%) !important;
+                color: #ffffff !important;
             }
         </style>
     </head>
@@ -523,6 +586,13 @@ app.layout = html.Div(
                 html.Div(
                     id="user-info-bar",
                     style={"display": "flex", "alignItems": "center", "gap": "12px", "paddingRight": "16px", "fontSize": "13px", "color": "#555", "whiteSpace": "nowrap"}
+                ),
+                html.Div(
+                    style={"display": "flex", "flexDirection": "column", "alignItems": "flex-end", "justifyContent": "center", "paddingRight": "16px", "lineHeight": "1.15", "whiteSpace": "nowrap"},
+                    children=[
+                        html.Div("LigandMaster", style={"fontWeight": "700", "fontSize": "16px", "background": "linear-gradient(135deg, #7b5cf0, #f06bc0)", "WebkitBackgroundClip": "text", "WebkitTextFillColor": "transparent", "letterSpacing": "0.3px"}),
+                        html.Div("Designed by N. Abelyan", style={"fontSize": "10px", "color": "#9aa0a6"})
+                    ]
                 )
             ]
         ),
@@ -639,10 +709,37 @@ app.layout = html.Div(
                                                     children=[
                                                         dcc.Upload(
                                                             id='upload-data',
-                                                            children=dbc.Button("Upload CSV", color="secondary", size="sm"),
+                                                            children=dbc.Button("Upload CSV", color="secondary", size="sm", className="btn-gradient-primary"),
                                                             multiple=False
                                                         ),
                                                         html.Div(id="upload-status", children="Using default CSV", style={"fontSize": "12px", "color": "#555"}),
+                                                        html.Div(
+                                                            style=SLIDER_CONTAINER_STYLE,
+                                                            children=[
+                                                                dcc.Dropdown(
+                                                                    id="slider-mode-dropdown",
+                                                                    options=[{"label": "By row count", "value": "rows"}] + dropdown_options,
+                                                                    value="rows",
+                                                                    clearable=False,
+                                                                    style=SLIDER_DROPDOWN_STYLE
+                                                                ),
+                                                                dcc.Slider(
+                                                                    id="table-row-slider",
+                                                                    min=0,
+                                                                    max=100,
+                                                                    step=1,
+                                                                    value=10,
+                                                                    marks=None,
+                                                                    tooltip={"placement": "left", "always_visible": False},
+                                                                    updatemode="mouseup",
+                                                                    className="dash-slider",
+                                                                    vertical=False,
+                                                                    verticalHeight=200,
+                                                                ),
+                                                                html.Div(id="slider-percentage-label", className="slider-badge"),
+                                                                html.Div(id="slider-count-label", style={"fontSize": "12px", "color": "#666"})
+                                                            ]
+                                                        ),
                                                         dbc.DropdownMenu(
                                                             label="Select columns",
                                                             children=[
@@ -728,37 +825,12 @@ app.layout = html.Div(
                                                                     id="calculate-extra-props-btn",
                                                                     color="success",
                                                                     size="sm",
+                                                                    className="btn-gradient-success",
                                                                     style={"width": "100%"}
                                                                 )
                                                             ]
                                                         ),
                                                         dbc.Button("Clear sorting", id="clear-sort-btn", color="secondary", size="sm"),
-                                                        html.Div(
-                                                            style=SLIDER_CONTAINER_STYLE,
-                                                            children=[
-                                                                dcc.Dropdown(
-                                                                    id="slider-mode-dropdown",
-                                                                    options=[{"label": "By row count", "value": "rows"}] + dropdown_options,
-                                                                    value="rows",
-                                                                    style={"width": "160px", "fontSize": "12px"}
-                                                                ),
-                                                                dcc.Slider(
-                                                                    id="table-row-slider",
-                                                                    min=0,
-                                                                    max=100,
-                                                                    step=1,
-                                                                    value=10,
-                                                                    marks=None,
-                                                                    tooltip={"placement": "left", "always_visible": False},
-                                                                    updatemode="mouseup",
-                                                                    className="dash-slider",
-                                                                    vertical=False,
-                                                                    verticalHeight=200,
-                                                                ),
-                                                                html.Div(id="slider-percentage-label", style={"width": "50px", "textAlign": "center", "fontSize": "12px"}),
-                                                                html.Div(id="slider-count-label", style={"fontSize": "12px", "marginLeft": "8px"})
-                                                            ]
-                                                        )
                                                     ]
                                                 ),
                                                 html.Div(
