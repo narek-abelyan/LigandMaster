@@ -1488,6 +1488,13 @@ def update_selected_image(selected_rows, selected_data):
     return html.Img(src=img_b64, style={"maxWidth": "100%", "maxHeight": "100%", "objectFit": "contain"})
 
 
+def _blank_figure(message):
+    fig = go.Figure()
+    fig.add_annotation(text=message, showarrow=False, font=dict(size=14, color="#888"))
+    fig.update_layout(margin=dict(l=20, r=20, t=20, b=20))
+    return fig
+
+
 # ---------- 3. Обновление всех графиков и изображения ----------
 @app.callback(
     Output("img-container", "children"),
@@ -1513,13 +1520,6 @@ def update_selected_image(selected_rows, selected_data):
     State("molecules-table", "derived_virtual_data"),
     State("molecules-table", "derived_viewport_data"),
 )
-def _blank_figure(message):
-    fig = go.Figure()
-    fig.add_annotation(text=message, showarrow=False, font=dict(size=14, color="#888"))
-    fig.update_layout(margin=dict(l=20, r=20, t=20, b=20))
-    return fig
-
-
 def update_all(selected_rows, viewport_selected_rows, hist_col, scatter_x, scatter_y, tpsa_hist_col,
                hist_color, tpsa_hist_color, scatter_color_col, slider_value, slider_mode,
                hist_nbins, hist_nbins2, compute_kde_clicks, filter_query, table_data, virtual_data, viewport_data):
