@@ -1,6 +1,8 @@
 # LigandMaster
 
-An interactive Dash dashboard for exploring molecular docking / screening results — upload a CSV of molecules, filter and sort them, visualize property distributions and correlations, and inspect 2D structures on the fly.
+An interactive Dash dashboard for exploring molecular docking / screening results. Upload a CSV of molecules and get an instant interactive workspace: sort and filter thousands of rows, plot any numeric property against another, view distributions, render 2D structures on click, compute extra molecular descriptors on demand, and build a shortlist of interesting molecules to export.
+
+Your CSV needs at minimum an **`ID`** and a **`SMILES`** column — everything else (docking scores, molecular weight, custom properties, whatever your pipeline produces) is picked up automatically as long as it's numeric.
 
 **`app.py` is the current, actively maintained dashboard and the one this README covers.** Other top-level scripts in this repo (`ClastMaster.py`, `LigandMaster1.2.py`, `LigandMaster1.3.py`) are earlier iterations kept for reference and aren't part of this app.
 
@@ -18,26 +20,34 @@ An interactive Dash dashboard for exploring molecular docking / screening result
 - **Selected Molecules workspace** — build a shortlist, dedupe by canonical SMILES, round values, and export to CSV.
 - **Login-protected & multi-user safe** — each logged-in session gets its own isolated copy of the data, so one user's upload never affects another's.
 
-## Running locally
+## Running locally (conda)
 
 ```bash
 git clone https://github.com/narek-abelyan/LigandMaster.git
 cd LigandMaster
-python3 -m venv .venv && source .venv/bin/activate
+
+conda create -n ligandmaster python=3.11
+conda activate ligandmaster
 pip install -r requirements.txt
 
-export APP_USERS="youruser:yourpassword"
-export SECRET_KEY="some-random-string"
 python app.py
 ```
 
-Open **http://localhost:8054** and log in.
+Open **http://localhost:8054** — you'll land on a login page.
 
-`APP_USERS` accepts multiple accounts as `user1:pass1,user2:pass2`. Without it, the app falls back to `admin:changeme` — fine for local testing, not for anything public.
+### Setting the username and password
 
-## Deployment
+Login credentials come from the `APP_USERS` environment variable, in the format `user:password`, with commas to separate multiple accounts. Set it *before* running `python app.py`, in the same terminal:
 
-Deployed on [Render](https://render.com) via `gunicorn app:server`. Set `APP_USERS` and `SECRET_KEY` as environment variables in the service settings — the app won't have sane defaults for either in production otherwise.
+```bash
+export APP_USERS="narek:mypassword"
+# or several accounts:
+export APP_USERS="narek:pass1,alice:pass2"
+
+python app.py
+```
+
+If `APP_USERS` isn't set, the app quietly falls back to `admin:changeme` — fine for a quick local check, but change it for anything you'd share with others. To avoid retyping it every session, add the `export APP_USERS=...` line to your `~/.bashrc` (or `~/.zshrc`) instead.
 
 ## Tech stack
 
