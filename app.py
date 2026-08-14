@@ -379,19 +379,31 @@ SLIDER_CONTAINER_STYLE = {
     "display": "flex",
     "alignItems": "center",
     "gap": "10px",
-    "width": "330px",
-    "padding": "4px 12px",
+    "height": "38px",
+    "padding": "0 14px",
+    "boxSizing": "border-box",
     "backgroundColor": "#f5f3ff",
     "border": "1px solid #e4defb",
     "borderRadius": "10px",
 }
 SLIDER_DROPDOWN_STYLE = {
-    "width": "140px",
+    "width": "130px",
     "height": "32px",
     "fontSize": "12px",
     "borderRadius": "8px",
     "border": "1px solid #d8d0f5",
     "backgroundColor": "#ffffff",
+    "marginTop": "-3px",
+}
+SLIDER_TRACK_WRAPPER_STYLE = {
+    "width": "210px",
+}
+TOOLBAR_BTN_STYLE = {
+    "height": "38px",
+    "display": "flex",
+    "alignItems": "center",
+    "padding": "0 16px",
+    "boxSizing": "border-box",
 }
 
 # ========== HTML-шаблон ==========
@@ -478,6 +490,70 @@ app.index_string = '''
             .btn-gradient-success {
                 background: linear-gradient(135deg, #22c58b 0%, #3ad1c4 100%) !important;
                 color: #ffffff !important;
+            }
+            .btn-gradient-info {
+                background: linear-gradient(135deg, #2ec5ce 0%, #4f8cfc 100%) !important;
+                color: #ffffff !important;
+            }
+            .btn-gradient-featured {
+                background: linear-gradient(135deg, #ff6bcb 0%, #9b5cf0 55%, #4f8cfc 100%) !important;
+                color: #ffffff !important;
+                box-shadow: 0 2px 10px rgba(155,92,240,0.5) !important;
+            }
+            .btn-gradient-featured:hover {
+                box-shadow: 0 4px 16px rgba(155,92,240,0.65) !important;
+            }
+            .btn-gradient-dark {
+                background: linear-gradient(135deg, #4b5563 0%, #1f2937 100%) !important;
+                color: #ffffff !important;
+            }
+            .btn-gradient-secondary {
+                background: linear-gradient(135deg, #9aa3b2 0%, #6b7684 100%) !important;
+                color: #ffffff !important;
+            }
+            .btn-gradient-warning {
+                background: linear-gradient(135deg, #f7b955 0%, #f5854a 100%) !important;
+                color: #3a2400 !important;
+            }
+            .btn-gradient-danger {
+                background: linear-gradient(135deg, #ff6b81 0%, #ee4266 100%) !important;
+                color: #ffffff !important;
+            }
+            .btn-gradient-rust {
+                background: linear-gradient(135deg, #ff5252 0%, #c62828 100%) !important;
+                color: #ffffff !important;
+            }
+            .btn-gradient-violet {
+                background: linear-gradient(135deg, #7b5cf0 0%, #c86bd6 100%) !important;
+                color: #ffffff !important;
+            }
+            .ligand-tab {
+                height: 44px !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                padding: 0 24px !important;
+                white-space: nowrap !important;
+                font-size: 14px !important;
+                font-weight: 500 !important;
+                color: #7c6fb0 !important;
+                border: none !important;
+                border-right: 1px solid #e4defb !important;
+                border-bottom: 3px solid transparent !important;
+                background: #f1ecfe !important;
+                transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
+            }
+            .ligand-tab:hover {
+                color: #7b5cf0 !important;
+                background: #e8e0fd !important;
+            }
+            .ligand-tab--selected {
+                color: #7b5cf0 !important;
+                font-weight: 700 !important;
+                background: #ffffff !important;
+            }
+            .ligand-tab--selected:hover {
+                background: #ffffff !important;
             }
         </style>
     </head>
@@ -571,27 +647,27 @@ app.layout = html.Div(
                         dcc.Tab(
                             label="Main Page",
                             value="main-page",
-                            style={"height": "42px", "display": "flex", "alignItems": "center", "justifyContent": "center"},
-                            selected_style={"height": "42px", "display": "flex", "alignItems": "center", "justifyContent": "center", "fontWeight": "600"}
+                            className="ligand-tab",
+                            selected_className="ligand-tab--selected",
                         ),
                         dcc.Tab(
                             label="Selected Molecules",
                             value="selected-page",
-                            style={"height": "42px", "display": "flex", "alignItems": "center", "justifyContent": "center"},
-                            selected_style={"height": "42px", "display": "flex", "alignItems": "center", "justifyContent": "center", "fontWeight": "600"}
+                            className="ligand-tab",
+                            selected_className="ligand-tab--selected",
                         ),
                     ],
-                    style={"padding": "0 4px", "backgroundColor": "#ffffff", "height": "44px", "flex": 1}
+                    style={"backgroundColor": "#ffffff", "height": "44px", "flex": 1}
                 ),
                 html.Div(
                     id="user-info-bar",
-                    style={"display": "flex", "alignItems": "center", "gap": "12px", "paddingRight": "16px", "fontSize": "13px", "color": "#555", "whiteSpace": "nowrap"}
+                    style={"display": "flex", "alignItems": "center", "gap": "12px", "borderLeft": "1px solid #e5e7eb", "paddingLeft": "16px", "paddingRight": "16px", "fontSize": "13px", "color": "#555", "whiteSpace": "nowrap"}
                 ),
                 html.Div(
-                    style={"display": "flex", "flexDirection": "column", "alignItems": "flex-end", "justifyContent": "center", "paddingRight": "16px", "lineHeight": "1.15", "whiteSpace": "nowrap"},
+                    style={"display": "flex", "flexDirection": "column", "alignItems": "flex-end", "justifyContent": "center", "marginLeft": "auto", "borderLeft": "1px solid #e5e7eb", "paddingLeft": "20px", "paddingRight": "26px", "lineHeight": "1.2", "whiteSpace": "nowrap"},
                     children=[
-                        html.Div("LigandMaster", style={"fontWeight": "700", "fontSize": "16px", "background": "linear-gradient(135deg, #7b5cf0, #f06bc0)", "WebkitBackgroundClip": "text", "WebkitTextFillColor": "transparent", "letterSpacing": "0.3px"}),
-                        html.Div("Designed by N. Abelyan", style={"fontSize": "10px", "color": "#9aa0a6"})
+                        html.Div("LigandMaster", style={"fontWeight": "700", "fontSize": "18px", "background": "linear-gradient(135deg, #7b5cf0, #f06bc0)", "WebkitBackgroundClip": "text", "WebkitTextFillColor": "transparent", "letterSpacing": "0.3px"}),
+                        html.Div("Designed by N. Abelyan", style={"fontSize": "11px", "color": "#555b66", "fontWeight": "500"})
                     ]
                 )
             ]
@@ -705,11 +781,11 @@ app.layout = html.Div(
                                             style={"height": "100%", "display": "flex", "flexDirection": "column"},
                                             children=[
                                                 html.Div(
-                                                    style={"display": "flex", "alignItems": "center", "gap": "10px", "marginBottom": "8px", "flexWrap": "wrap"},
+                                                    style={"display": "flex", "alignItems": "center", "gap": "10px", "marginTop": "3px", "marginBottom": "8px", "flexWrap": "wrap"},
                                                     children=[
                                                         dcc.Upload(
                                                             id='upload-data',
-                                                            children=dbc.Button("Upload CSV", color="secondary", size="sm", className="btn-gradient-primary"),
+                                                            children=dbc.Button("Upload CSV", color="secondary", size="sm", className="btn-gradient-primary", style=TOOLBAR_BTN_STYLE),
                                                             multiple=False
                                                         ),
                                                         html.Div(id="upload-status", children="Using default CSV", style={"fontSize": "12px", "color": "#555"}),
@@ -723,18 +799,23 @@ app.layout = html.Div(
                                                                     clearable=False,
                                                                     style=SLIDER_DROPDOWN_STYLE
                                                                 ),
-                                                                dcc.Slider(
-                                                                    id="table-row-slider",
-                                                                    min=0,
-                                                                    max=100,
-                                                                    step=1,
-                                                                    value=10,
-                                                                    marks=None,
-                                                                    tooltip={"placement": "left", "always_visible": False},
-                                                                    updatemode="mouseup",
-                                                                    className="dash-slider",
-                                                                    vertical=False,
-                                                                    verticalHeight=200,
+                                                                html.Div(
+                                                                    style=SLIDER_TRACK_WRAPPER_STYLE,
+                                                                    children=[
+                                                                        dcc.Slider(
+                                                                            id="table-row-slider",
+                                                                            min=0,
+                                                                            max=100,
+                                                                            step=1,
+                                                                            value=10,
+                                                                            marks=None,
+                                                                            tooltip={"placement": "left", "always_visible": False},
+                                                                            updatemode="mouseup",
+                                                                            className="dash-slider",
+                                                                            vertical=False,
+                                                                            verticalHeight=200,
+                                                                        )
+                                                                    ]
                                                                 ),
                                                                 html.Div(id="slider-percentage-label", className="slider-badge"),
                                                                 html.Div(id="slider-count-label", style={"fontSize": "12px", "color": "#666"})
@@ -759,12 +840,16 @@ app.layout = html.Div(
                                                                 )
                                                             ],
                                                             color="dark",
-                                                            size="sm"
+                                                            size="sm",
+                                                            toggleClassName="btn-gradient-dark",
+                                                            toggle_style=TOOLBAR_BTN_STYLE
                                                         ),
                                                         dbc.DropdownMenu(
                                                             label="Calculate properties",
                                                             color="primary",
                                                             size="sm",
+                                                            toggleClassName="btn-gradient-featured",
+                                                            toggle_style=TOOLBAR_BTN_STYLE,
                                                             children=[
                                                                 html.Div(
                                                                     style={"maxHeight": "340px", "overflowY": "auto"},
@@ -830,7 +915,7 @@ app.layout = html.Div(
                                                                 )
                                                             ]
                                                         ),
-                                                        dbc.Button("Clear sorting", id="clear-sort-btn", color="secondary", size="sm"),
+                                                        dbc.Button("Clear sorting", id="clear-sort-btn", color="secondary", size="sm", className="btn-gradient-rust", style=TOOLBAR_BTN_STYLE),
                                                     ]
                                                 ),
                                                 html.Div(
@@ -973,6 +1058,7 @@ app.layout = html.Div(
                                                         )
                                                     ]),
                                                     dbc.Button("Compute KDE", id="compute-kde-btn", color="primary", size="sm",
+                                                               className="btn-gradient-violet",
                                                                style={"height": "36px", "alignSelf": "center", "marginLeft": "8px"}),
                                                 ]
                                             ),
@@ -1001,6 +1087,8 @@ app.layout = html.Div(
                                     label="Select columns",
                                     color="primary",
                                     size="sm",
+                                    toggleClassName="btn-gradient-dark",
+                                    toggle_style=TOOLBAR_BTN_STYLE,
                                     children=[
                                         dbc.Checklist(
                                             id="selected-select-all-toggle",
@@ -1018,10 +1106,10 @@ app.layout = html.Div(
                                         )
                                     ]
                                 ),
-                                dbc.Button("Delete selected row", id="delete-selected-row-btn", color="danger", size="sm"),
-                                dbc.Button("Clear All", id="clear-selected-btn", color="warning", size="sm"),
-                                dbc.Button("Remove SMILES Duplicates", id="dedup-selected-btn", color="dark", size="sm"),
-                                dbc.Button("Round numeric values", id="round-selected-btn", color="secondary", size="sm"),
+                                dbc.Button("Delete selected row", id="delete-selected-row-btn", color="danger", size="sm", className="btn-gradient-danger", style=TOOLBAR_BTN_STYLE),
+                                dbc.Button("Clear All", id="clear-selected-btn", color="warning", size="sm", className="btn-gradient-warning", style=TOOLBAR_BTN_STYLE),
+                                dbc.Button("Remove SMILES Duplicates", id="dedup-selected-btn", color="dark", size="sm", className="btn-gradient-dark", style=TOOLBAR_BTN_STYLE),
+                                dbc.Button("Round numeric values", id="round-selected-btn", color="secondary", size="sm", className="btn-gradient-secondary", style=TOOLBAR_BTN_STYLE),
                                 dcc.Dropdown(
                                     id="round-digits-dropdown",
                                     options=[{"label": str(i), "value": i} for i in range(0, 7)],
@@ -1033,11 +1121,11 @@ app.layout = html.Div(
                                 html.Div(style={"marginLeft": "auto", "display": "flex", "alignItems": "center"}, children=[
                                     dcc.Upload(
                                         id='upload-selected-data',
-                                        children=dbc.Button("Upload CSV", color="info", size="sm", style={"marginRight": "8px"}),
+                                        children=dbc.Button("Upload CSV", color="info", size="sm", className="btn-gradient-info", style={**TOOLBAR_BTN_STYLE, "marginRight": "8px"}),
                                         multiple=False,
                                         style={"display": "inline-block"}
                                     ),
-                                    dbc.Button("Download Selected CSV", id="download-selected-btn", color="success", size="sm"),
+                                    dbc.Button("Download Selected CSV", id="download-selected-btn", color="success", size="sm", className="btn-gradient-success", style=TOOLBAR_BTN_STYLE),
                                 ]),
                             ]
                         ),
