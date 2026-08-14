@@ -33,7 +33,7 @@ pip install -r requirements.txt
 python app.py
 ```
 
-Open **http://localhost:8054** — you'll land on a login page.
+Open **http://localhost:8054** — you'll land on a login page. Enter the username and password from `APP_USERS` (see below) to get in.
 
 ### Setting the username and password
 
