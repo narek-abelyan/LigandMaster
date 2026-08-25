@@ -27,6 +27,17 @@ SCATTER_SAMPLE = 20000
 
 
 def prepare_df(new_df: pd.DataFrame) -> pd.DataFrame:
+    # Разрешаем разный регистр названий колонок (smiles/Smiles/SMILES),
+    # и допускаем "name" вместо "ID", если своей ID-колонки нет.
+    col_lookup = {str(c).strip().lower(): c for c in new_df.columns}
+
+    if "smiles" in col_lookup and col_lookup["smiles"] != "SMILES":
+        new_df = new_df.rename(columns={col_lookup["smiles"]: "SMILES"})
+
+    id_source = col_lookup.get("id") or col_lookup.get("name")
+    if id_source and id_source != "ID":
+        new_df = new_df.rename(columns={id_source: "ID"})
+
     if 'ID' in new_df.columns:
         if pd.api.types.is_numeric_dtype(new_df['ID']):
             new_df['ID'] = new_df['ID'].astype(int).astype(str)
@@ -916,6 +927,7 @@ app.layout = html.Div(
                                                             ]
                                                         ),
                                                         dbc.Button("Clear sorting", id="clear-sort-btn", color="secondary", size="sm", className="btn-gradient-rust", style=TOOLBAR_BTN_STYLE),
+                                                        dbc.Button("Clear filters", id="clear-filters-btn", color="secondary", size="sm", className="btn-gradient-secondary", style=TOOLBAR_BTN_STYLE),
                                                     ]
                                                 ),
                                                 html.Div(
@@ -1907,6 +1919,18 @@ def clear_table_sort(n_clicks):
     if not n_clicks:
         return no_update
     return []
+
+
+# ---------- Сброс фильтров таблицы ----------
+@app.callback(
+    Output("molecules-table", "filter_query"),
+    Input("clear-filters-btn", "n_clicks"),
+    prevent_initial_call=True,
+)
+def clear_table_filters(n_clicks):
+    if not n_clicks:
+        return no_update
+    return ""
 
 
 @app.callback(
