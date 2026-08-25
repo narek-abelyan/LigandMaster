@@ -1,6 +1,7 @@
 import base64
 import io
 import os
+import re
 import uuid
 from flask import request, session, redirect, Response
 import pandas as pd
@@ -26,15 +27,28 @@ CSV_PATH = "molecules_scaf_maccs.csv"  # путь к CSV
 SCATTER_SAMPLE = 20000
 
 
+def _normalize_col_name(name):
+    return re.sub(r'[\s_-]+', '', str(name).strip().lower())
+
+
+# Порядок важен: первый найденный вариант побеждает.
+ID_COLUMN_ALIASES = [
+    "id", "name", "molid", "moleculeid", "compoundid",
+    "moleculename", "compoundname", "molname",
+]
+SMILES_COLUMN_ALIASES = ["smiles"]
+
+
 def prepare_df(new_df: pd.DataFrame) -> pd.DataFrame:
-    # Разрешаем разный регистр названий колонок (smiles/Smiles/SMILES),
-    # и допускаем "name" вместо "ID", если своей ID-колонки нет.
-    col_lookup = {str(c).strip().lower(): c for c in new_df.columns}
+    # Разрешаем разные варианты названий колонок (id/Id/mol_id/Molecule-ID/name/...),
+    # чтобы не требовать от пользователя ровно "ID" и "SMILES".
+    col_lookup = {_normalize_col_name(c): c for c in new_df.columns}
 
-    if "smiles" in col_lookup and col_lookup["smiles"] != "SMILES":
-        new_df = new_df.rename(columns={col_lookup["smiles"]: "SMILES"})
+    smiles_source = next((col_lookup[a] for a in SMILES_COLUMN_ALIASES if a in col_lookup), None)
+    if smiles_source and smiles_source != "SMILES":
+        new_df = new_df.rename(columns={smiles_source: "SMILES"})
 
-    id_source = col_lookup.get("id") or col_lookup.get("name")
+    id_source = next((col_lookup[a] for a in ID_COLUMN_ALIASES if a in col_lookup), None)
     if id_source and id_source != "ID":
         new_df = new_df.rename(columns={id_source: "ID"})
 
